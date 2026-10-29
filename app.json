@@ -9,10 +9,26 @@
     "backgroundColor": "#F1F3F7",
     "android": {
       "package": "bg.semeenbyudzhet",
-      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#5B3A9E" },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#5B3A9E"
+      },
       "softwareKeyboardLayoutMode": "resize"
     },
-    "runtimeVersion": { "policy": "appVersion" },
-    "updates": { "checkAutomatically": "ON_LOAD", "fallbackToCacheTimeout": 0 }
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/b1909b20-c0fc-438c-a651-cff953a9fc94"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b1909b20-c0fc-438c-a651-cff953a9fc94"
+      }
+    },
+    "owner": "mech089s-team",
+    "ios": {}
   }
 }
