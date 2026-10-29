@@ -1,0 +1,13 @@
+{
+  "name": "semeen-byudzhet",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/engine/budgetEngine.test.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

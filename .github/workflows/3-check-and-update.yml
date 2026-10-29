@@ -1,0 +1,42 @@
+# Every push: check the code, and if it passes, send the new version to both phones
+# as an over-the-air update (it installs itself the next time the app opens).
+name: "3 · Проверка и обновяване"
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: update
+  cancel-in-progress: false
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip until "1 · Първоначална настройка" has run
+        id: ready
+        run: |
+          if [ -f package-lock.json ]; then echo "ok=1" >> $GITHUB_OUTPUT; else echo "ok=0" >> $GITHUB_OUTPUT; echo "Run workflow 1 first."; fi
+          node -e "const a=require('./app.json');process.exit(a.expo?.extra?.eas?.projectId?0:1)" && echo "linked=1" >> $GITHUB_OUTPUT || echo "linked=0" >> $GITHUB_OUTPUT
+      - uses: actions/setup-node@v4
+        if: steps.ready.outputs.ok == '1'
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.ready.outputs.ok == '1'
+        run: npm ci
+      - name: Type-check
+        if: steps.ready.outputs.ok == '1'
+        run: npx tsc --noEmit
+      - name: Budget engine tests
+        if: steps.ready.outputs.ok == '1'
+        run: npm test
+      - name: Android bundle
+        if: steps.ready.outputs.ok == '1'
+        run: npx expo export --platform android --output-dir /tmp/export
+      - name: Publish the update to both phones
+        if: steps.ready.outputs.ok == '1' && steps.ready.outputs.linked == '1'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          MSG: ${{ github.event.head_commit.message || 'Обновяване' }}
+        run: npx eas-cli@latest update --channel production --platform android --non-interactive --message "$MSG"

@@ -1,0 +1,41 @@
+# Run once from the Actions tab: installs the exact library versions that match the
+# current Expo release, links the project to your Expo account, and saves the result.
+name: "1 · Първоначална настройка"
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Expo and the app's libraries
+        run: |
+          npm install expo@latest
+          npx expo install react react-native expo-status-bar expo-updates expo-crypto \
+            react-native-svg react-native-safe-area-context @react-native-async-storage/async-storage \
+            @react-native-community/datetimepicker react-native-url-polyfill
+          npm install @supabase/supabase-js
+          npx expo install typescript @types/react -- --save-dev
+      - name: Type-check and run the budget tests
+        run: |
+          npx tsc --noEmit
+          npm test
+      - name: Check that the app bundles for Android
+        run: npx expo export --platform android --output-dir /tmp/export
+      - name: Link the project to your Expo account
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli@latest init --non-interactive --force
+          npx eas-cli@latest update:configure --platform android --non-interactive
+      - name: Save versions and Expo settings to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Първоначална настройка: версии на библиотеките и връзка с Expo" || echo "Nothing to commit"
+          git push

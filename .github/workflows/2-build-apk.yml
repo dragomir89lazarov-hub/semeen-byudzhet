@@ -1,0 +1,26 @@
+# Run from the Actions tab when you need a new install file (first install, or after a
+# change that needs new phone permissions). Takes about 15–20 minutes.
+name: "2 · Създай APK за Android"
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the APK on Expo's servers
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform android --profile preview --non-interactive --wait --json > build.json
+      - name: Show the download link
+        run: |
+          URL=$(node -e "const b=require('./build.json');const x=Array.isArray(b)?b[0]:b;console.log(x.artifacts?.buildUrl||x.artifacts?.applicationArchiveUrl||'')")
+          echo "## Готово" >> $GITHUB_STEP_SUMMARY
+          echo "Отворете тази връзка от телефона, за да изтеглите и инсталирате приложението:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "$URL" >> $GITHUB_STEP_SUMMARY
+          echo "APK: $URL"
