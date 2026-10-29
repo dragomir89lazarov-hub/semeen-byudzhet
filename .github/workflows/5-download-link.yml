@@ -1,0 +1,18 @@
+# Prints the download link of the latest Android build (to share with a new phone).
+name: "5 · Връзка за изтегляне"
+on: workflow_dispatch
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Latest APK link
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli@latest build:list --platform android --status finished --limit 1 --json --non-interactive > /tmp/b.json
+          URL=$(node -e "const b=require('/tmp/b.json');const x=b[0]||{};console.log(x.artifacts?.buildUrl||x.artifacts?.applicationArchiveUrl||'')")
+          PAGE=$(node -e "const b=require('/tmp/b.json');const x=b[0]||{};console.log(x.id?'https://expo.dev/accounts/'+(x.project?.ownerAccount?.name||'')+'/projects/'+(x.project?.slug||'semeen-byudzhet')+'/builds/'+x.id:'')")
+          echo "::notice title=APK::$URL"
+          echo "::notice title=Page::$PAGE"
+          echo "## Връзка за изтегляне" >> $GITHUB_STEP_SUMMARY; echo "$URL" >> $GITHUB_STEP_SUMMARY
