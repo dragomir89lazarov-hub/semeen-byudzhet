@@ -10,6 +10,8 @@ const categories = [
   { id: 'kids', name: 'Детски нужди' }, { id: 'fun', name: 'Развлечения' }, { id: 'car', name: 'Кола' },
 ];
 const image = readFileSync(new URL('./fixtures/receipt-lidl.jpg', import.meta.url)).toString('base64');
+process.on('uncaughtException', e => { console.log(`::error title=Скриптът спря::${String((e as Error)?.stack || e).replace(/\n/g, ' ').slice(0, 900)}`); process.exit(1); });
+process.on('unhandledRejection', e => { console.log(`::error title=Скриптът спря::${String((e as Error)?.stack || e).replace(/\n/g, ' ').slice(0, 900)}`); process.exit(1); });
 const r = await readReceipt({ apiKey: process.env.GEMINI_API_KEY || '', model: process.env.GEMINI_MODEL, image, mimeType: 'image/jpeg', categories, today: '2026-10-29' });
 if (!r.ok) { console.log(`::error title=Gemini ${r.error}::${(r.detail || '').replace(/\n/g, ' ').slice(0, 800)}`); process.exit(1); }
 const rec = normalizeReceipt(r.data, categories.map(c => c.id));
