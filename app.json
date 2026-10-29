@@ -2,7 +2,7 @@
   "expo": {
     "name": "Семеен бюджет",
     "slug": "semeen-byudzhet",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -29,6 +29,15 @@
       }
     },
     "owner": "mech089s-team",
-    "ios": {}
+    "ios": {},
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Приложението използва снимки от галерията, за да разчете касови бележки и онлайн поръчки.",
+          "cameraPermission": "Приложението използва камерата, за да снима касови бележки."
+        }
+      ]
+    ]
   }
 }

@@ -15,6 +15,8 @@ import BucketsScreen from './src/screens/BucketsScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import HouseholdScreen from './src/screens/HouseholdScreen';
 import QuickAddSheet from './src/screens/QuickAddSheet';
+import ReceiptReview from './src/screens/ReceiptReview';
+import type { Receipt } from './src/engine/receipt';
 import SetupScreen from './src/screens/SetupScreen';
 import TodayScreen from './src/screens/TodayScreen';
 import { T, ToastProvider } from './src/ui/kit';
@@ -84,19 +86,21 @@ function Main() {
   const [sub, setSub] = useState<string | null>(null);
   const [txFilter, setTxFilter] = useState('all');
   const [sheet, setSheet] = useState<SheetInit | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [metric, setMetricState] = useState<Metric>('today');
   useEffect(() => { AsyncStorage.getItem('metric').then(v => { if (v === 'today' || v === 'week' || v === 'period' || v === 'avg') setMetricState(v); }).catch(() => { }); }, []);
 
   // Android back button: close the sheet, then leave sub-screens, then go to Today.
   useEffect(() => {
     const h = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (receipt) { setReceipt(null); return true; }
       if (sheet) { setSheet(null); return true; }
       if (sub) { setSub(null); setTxFilter('all'); return true; }
       if (tab !== 'today') { setTab('today'); return true; }
       return false;
     });
     return () => h.remove();
-  }, [sheet, sub, tab]);
+  }, [sheet, sub, tab, receipt]);
 
   const nav: Nav = useMemo(() => ({
     tab, setTab: (x: Tab) => { setTab(x); setSub(null); }, sub, setSub, txFilter, setTxFilter,
@@ -141,7 +145,8 @@ function Main() {
             );
           })}
         </View>
-        <QuickAddSheet init={sheet} onClose={() => setSheet(null)} />
+        <QuickAddSheet init={sheet} onClose={() => setSheet(null)} onReceipt={r => { setSheet(null); setReceipt(r); }} />
+        <ReceiptReview receipt={receipt} onClose={() => setReceipt(null)} />
       </View>
     </NavCtx.Provider>
   );

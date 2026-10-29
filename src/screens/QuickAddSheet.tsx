@@ -9,12 +9,14 @@ import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
 import { Btn, Check, Chip, Chips, Field, H2, Input, Row, T, useToast } from '../ui/kit';
 import { SheetInit, txMeta } from '../ui/nav';
+import type { Receipt } from '../engine/receipt';
+import { readReceiptImage } from '../lib/receiptReader';
 
 type Mode = 'expense' | 'income' | 'transfer';
 let lastCat: string | null = null;
 let lastPayer: string | null = null;
 
-export default function QuickAddSheet({ init, onClose }: { init: SheetInit | null; onClose: () => void }) {
+export default function QuickAddSheet({ init, onClose, onReceipt }: { init: SheetInit | null; onClose: () => void; onReceipt: (r: Receipt) => void }) {
   const t = useTheme(); const toast = useToast();
   const s = useStore(); const m = s.model;
   const editing = init?.editId ? m.txs.find(x => x.id === init.editId) || null : null;
@@ -34,12 +36,13 @@ export default function QuickAddSheet({ init, onClose }: { init: SheetInit | nul
   const [conflict, setConflict] = useState<Tx | null>(null);
   const [armDelete, setArmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
   const [newCat, setNewCat] = useState(false); const [newCatName, setNewCatName] = useState(''); const [newCatFixed, setNewCatFixed] = useState(false); const [newCatErr, setNewCatErr] = useState('');
   const baseVersion = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!init) return;
-    setError(''); setConflict(null); setArmDelete(false); setNewCat(false); setNewCatName(''); setNewCatErr(''); setBusy(false);
+    setError(''); setConflict(null); setArmDelete(false); setNewCat(false); setNewCatName(''); setNewCatErr(''); setBusy(false); setReading(false);
     if (editing) {
       setMode(editing.kind === 'income' ? 'income' : editing.kind === 'expense' ? 'expense' : 'transfer');
       setAmount((editing.amountCents / 100).toFixed(2).replace('.', ','));
@@ -98,6 +101,14 @@ export default function QuickAddSheet({ init, onClose }: { init: SheetInit | nul
     lastPayer = who;
     onClose(); toast(editing ? 'Промените са записани' : 'Записано');
   }
+  async function scan(source: 'camera' | 'gallery') {
+    setError('');
+    const r = await readReceiptImage(source, cats.map(k => ({ id: k.id, name: k.name })), today(), () => setReading(true));
+    setReading(false);
+    if (r.ok) { onReceipt(r.receipt); return; }
+    if ('message' in r) setError(r.message);
+  }
+
   async function remove() {
     if (!armDelete) return setArmDelete(true);
     await s.deleteTx(editing!.id); onClose(); toast('Изтрито');
@@ -129,6 +140,16 @@ export default function QuickAddSheet({ init, onClose }: { init: SheetInit | nul
                 style={{ fontSize: 46, fontWeight: '800', color: t.ink, minWidth: 140, textAlign: 'right', padding: 0 }} />
               <Text style={{ fontSize: 30, color: t.ink2 }}>€</Text>
             </View>
+
+            {mode === 'expense' && !editing ? (
+              <View style={{ gap: 6 }}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Btn style={{ flex: 1 }} variant="accentOutline" title="📷 Снимай бележка" disabled={reading} onPress={() => scan('camera')} />
+                  <Btn style={{ flex: 1 }} variant="accentOutline" title="🖼 От галерията" disabled={reading} onPress={() => scan('gallery')} />
+                </View>
+                <T muted small>{reading ? 'Разчитане на изображението… обикновено 5–15 секунди.' : 'Касова бележка или снимка на екрана от онлайн поръчка: продуктите се разделят по категории за одобрение.'}</T>
+              </View>
+            ) : null}
 
             {mode === 'expense' ? (
               <>
