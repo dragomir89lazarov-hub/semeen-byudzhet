@@ -16,7 +16,9 @@ export type ReadResult =
   | { ok: true; data: RawReceipt; model: string }
   | { ok: false; error: 'limit' | 'not_configured' | 'unreadable' | 'failed'; detail?: string };
 
-const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash'];
+// 'gemini-flash-latest' follows Google's newest Flash model; the others are fallbacks when it's busy or retired.
+const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export function buildPrompt(categories: CategoryHint[], today: string): string {
   return [
@@ -69,25 +71,32 @@ export async function readReceipt(o: {
   const models = [o.model, ...DEFAULT_MODELS].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
   let lastDetail = '';
   for (const model of models) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': o.apiKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ inline_data: { mime_type: o.mimeType || 'image/jpeg', data: o.image } }, { text: buildPrompt(o.categories, o.today) }] }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
-      }),
-    });
-    if (res.status === 404) { lastDetail = `${model}: not found`; continue; }       // model retired: try the next one
-    if (res.status === 429) return { ok: false, error: 'limit', detail: (await res.text()).slice(0, 300) };
-    if (!res.ok) return { ok: false, error: 'failed', detail: `${model} ${res.status}: ${(await res.text()).slice(0, 400)}` };
-    const body = await res.json();
-    const text: string = body?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '';
-    try {
-      const data = JSON.parse(text) as RawReceipt;
-      if (!Array.isArray(data.items)) data.items = [];
-      return { ok: true, data, model };
-    } catch {
-      return { ok: false, error: 'unreadable', detail: text.slice(0, 300) };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': o.apiKey },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ inline_data: { mime_type: o.mimeType || 'image/jpeg', data: o.image } }, { text: buildPrompt(o.categories, o.today) }] }],
+          generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
+        }),
+      });
+      if (res.status === 404) { lastDetail = `${model}: not found`; break; }                  // retired: next model
+      if (res.status === 503 || res.status === 500) {                                          // busy: retry once, then next model
+        lastDetail = `${model} ${res.status}: ${(await res.text()).slice(0, 200)}`;
+        if (attempt === 0) await sleep(1500);
+        continue;
+      }
+      if (res.status === 429) return { ok: false, error: 'limit', detail: (await res.text()).slice(0, 300) };
+      if (!res.ok) return { ok: false, error: 'failed', detail: `${model} ${res.status}: ${(await res.text()).slice(0, 400)}` };
+      const body = await res.json();
+      const text: string = body?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '';
+      try {
+        const data = JSON.parse(text) as RawReceipt;
+        if (!Array.isArray(data.items)) data.items = [];
+        return { ok: true, data, model };
+      } catch {
+        return { ok: false, error: 'unreadable', detail: text.slice(0, 300) };
+      }
     }
   }
   return { ok: false, error: 'failed', detail: lastDetail || 'no model available' };
