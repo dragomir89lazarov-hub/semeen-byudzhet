@@ -13,6 +13,7 @@ jobs:
         with:
           node-version: 22
       - name: Install Expo and the app's libraries
+        if: ${{ hashFiles('package-lock.json') == '' }}
         run: |
           npm install expo@latest
           npx expo install react react-native expo-status-bar expo-updates expo-crypto \
@@ -20,22 +21,41 @@ jobs:
             @react-native-community/datetimepicker react-native-url-polyfill
           npm install @supabase/supabase-js
           npx expo install typescript @types/react -- --save-dev
+      - name: Use the saved library versions
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm ci
       - name: Type-check and run the budget tests
         run: |
           npx tsc --noEmit
           npm test
       - name: Check that the app bundles for Android
         run: npx expo export --platform android --output-dir /tmp/export
+      - name: Save the library versions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "Версии на библиотеките" || echo "Nothing to commit"
+          git push
+      - name: Check the Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error title=EXPO_TOKEN липсва::Добавете секрета EXPO_TOKEN в Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          npx eas-cli@latest whoami > /tmp/whoami.txt 2>&1 || { echo "::error title=Expo token rejected::$(tail -c 600 /tmp/whoami.txt | tr '\n' ' ')"; exit 1; }
+          echo "Expo account: $(cat /tmp/whoami.txt)"
       - name: Link the project to your Expo account
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npx eas-cli@latest init --non-interactive --force
-          npx eas-cli@latest update:configure --platform android --non-interactive
-      - name: Save versions and Expo settings to the repository
+          set -o pipefail
+          npx eas-cli@latest init --non-interactive --force 2>&1 | tee /tmp/init.txt || { echo "::error title=eas init failed::$(tail -c 900 /tmp/init.txt | tr '\n' ' ')"; exit 1; }
+          npx eas-cli@latest update:configure --platform android --non-interactive 2>&1 | tee /tmp/upd.txt || { echo "::error title=update:configure failed::$(tail -c 900 /tmp/upd.txt | tr '\n' ' ')"; exit 1; }
+      - name: Save the Expo settings
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Първоначална настройка: версии на библиотеките и връзка с Expo" || echo "Nothing to commit"
+          git commit -m "Връзка с Expo" || echo "Nothing to commit"
           git push
