@@ -6,7 +6,7 @@
   "scripts": {
     "start": "expo start",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/engine/budgetEngine.test.ts"
+    "test": "node --experimental-strip-types --test src/engine/budgetEngine.test.ts src/engine/receipt.test.ts"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

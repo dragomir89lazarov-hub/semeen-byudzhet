@@ -1,0 +1,50 @@
+# Installs (or updates) the receipt-reading function in Supabase and stores the Gemini key there.
+# Runs automatically when the function changes; can also be started by hand.
+name: "6 · Разчитане на бележки"
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['supabase/functions/**', 'scripts/test-receipt.ts']
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check secrets
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          [ -n "$GEMINI_API_KEY" ] || { echo "::error title=GEMINI_API_KEY липсва::Добавете секрета в GitHub."; exit 1; }
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || { echo "::error title=SUPABASE_ACCESS_TOKEN липсва::Добавете секрета в GitHub."; exit 1; }
+      - name: Available Gemini models
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          curl -sS "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" -H "x-goog-api-key: $GEMINI_API_KEY" > /tmp/models.json
+          echo "::notice title=Модели::$(node -e "const m=require('/tmp/models.json');console.log((m.models||[]).map(x=>x.name.replace('models/','')).filter(n=>/flash/.test(n)&&!/tts|image|audio|live|embed/.test(n)).join(', ')||JSON.stringify(m).slice(0,300))")"
+      - name: Read the sample receipt with Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+        run: node --experimental-strip-types scripts/test-receipt.ts
+      - name: Install the function in Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          REF=$(node -e "const s=require('fs').readFileSync('src/config.ts','utf8');console.log(s.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)[1])")
+          npx -y supabase@latest secrets set GEMINI_API_KEY="$GEMINI_API_KEY" --project-ref "$REF" > /tmp/s.txt 2>&1 || { echo "::error title=Supabase secrets::$(tail -c 600 /tmp/s.txt | tr '\n' ' ')"; exit 1; }
+          npx -y supabase@latest functions deploy read-receipt --project-ref "$REF" --no-verify-jwt --use-api > /tmp/d.txt 2>&1 || { echo "::error title=Supabase deploy::$(tail -c 800 /tmp/d.txt | tr '\n' ' ')"; exit 1; }
+          echo "::notice title=Функцията е инсталирана::read-receipt"
+      - name: Strangers are refused
+        run: |
+          URL=$(node -e "const s=require('fs').readFileSync('src/config.ts','utf8');console.log(s.match(/SUPABASE_URL = '([^']+)'/)[1])")
+          KEY=$(node -e "const s=require('fs').readFileSync('src/config.ts','utf8');console.log(s.match(/SUPABASE_KEY = '([^']+)'/)[1])")
+          CODE=$(curl -s -o /tmp/f.txt -w "%{http_code}" -X POST "$URL/functions/v1/read-receipt" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "content-type: application/json" -d '{"image":"x"}')
+          echo "::notice title=Проверка без вход::HTTP $CODE $(head -c 200 /tmp/f.txt)"
+          [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || { echo "::error title=Функцията не е защитена::HTTP $CODE"; exit 1; }
