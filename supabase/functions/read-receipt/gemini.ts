@@ -72,14 +72,22 @@ export async function readReceipt(o: {
   let lastDetail = '';
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      let res: Response;
+      try {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        signal: AbortSignal.timeout(45_000),
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': o.apiKey },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ inline_data: { mime_type: o.mimeType || 'image/jpeg', data: o.image } }, { text: buildPrompt(o.categories, o.today) }] }],
           generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
         }),
-      });
+        });
+      } catch (e) {                                                                            // dropped connection or timeout: like "busy"
+        lastDetail = `${model}: ${String((e as Error)?.message || e)}`;
+        if (attempt === 0) await sleep(1500);
+        continue;
+      }
       if (res.status === 404) { lastDetail = `${model}: not found`; break; }                  // retired: next model
       if (res.status === 503 || res.status === 500) {                                          // busy: retry once, then next model
         lastDetail = `${model} ${res.status}: ${(await res.text()).slice(0, 200)}`;
