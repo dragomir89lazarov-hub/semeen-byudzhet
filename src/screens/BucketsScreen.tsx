@@ -5,13 +5,16 @@ import { useStore } from '../data/store';
 import { dLabel, eur, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import { Ring, WalletIcon } from '../ui/charts';
-import { Btn, Card, H2, Label, NUM, Screen, T, useToast } from '../ui/kit';
+import { Btn, Card, Field, H2, Input, Label, NUM, Screen, T, useToast } from '../ui/kit';
+import * as Engine from '../engine/budgetEngine';
 import { TxRow, useNav } from '../ui/nav';
 
 export default function BucketsScreen() {
   const t = useTheme(); const nav = useNav(); const toast = useToast();
-  const { model: m, updateSettings } = useStore();
+  const { model: m, updateSettings, addBucket } = useStore();
   const [open, setOpen] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState(''); const [newTarget, setNewTarget] = useState(''); const [newErr, setNewErr] = useState('');
   const c = currentCycle(m);
   const pool = poolOf(m);
   const bs = savingsOf(m);
@@ -77,6 +80,32 @@ export default function BucketsScreen() {
           </Card>
         );
       })}
+
+      <Card>
+        {!adding ? (
+          <Btn variant="accentOutline" block title="+ Нов фонд" onPress={() => { setAdding(true); setNewErr(''); }} />
+        ) : (
+          <>
+            <H2>Нов фонд</H2>
+            <Field label="Име"><Input value={newName} onChangeText={setNewName} placeholder="Напр. Ваканция, Ремонт" autoFocus /></Field>
+            <Field label="Цел в € (по избор)"><Input value={newTarget} onChangeText={setNewTarget} keyboardType="decimal-pad" placeholder="Напр. 1500" /></Field>
+            {newErr ? <T small style={{ color: t.bad }}>{newErr}</T> : null}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Btn variant="primary" title="Създай фонд" onPress={async () => {
+                const name = newName.trim();
+                if (!name) return setNewErr('Въведете име на фонда.');
+                if (m.buckets.some(b => !b.archived && b.name.toLowerCase() === name.toLowerCase())) return setNewErr('Вече има фонд с това име.');
+                const target = newTarget.trim() ? Engine.parseAmountToCents(newTarget) : null;
+                if (newTarget.trim() && !target) return setNewErr('Проверете сумата за целта, например 1500 или 1500,50.');
+                await addBucket(name, target);
+                setAdding(false); setNewName(''); setNewTarget(''); setNewErr('');
+                toast(`Фондът „${name}“ е създаден`);
+              }} />
+              <Btn title="Отказ" onPress={() => { setAdding(false); setNewErr(''); }} />
+            </View>
+          </>
+        )}
+      </Card>
     </Screen>
   );
 }

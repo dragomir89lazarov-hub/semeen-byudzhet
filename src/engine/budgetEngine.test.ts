@@ -127,6 +127,21 @@ test('velocity series ends at today with an even safe line', () => {
   assert.equal(s.at(-1)!.safeCents, Math.round(260000 * 7 / 33));
 });
 
+test('overspending shows negative today; at midnight the limit is recomputed from what is left', () => {
+  // 30-day cycle with 1500 € → 50 €/day. 100 € spent on day 1.
+  const c30 = { id: 'c', startDate: '2026-11-02', endDate: '2026-12-01' };
+  const txs: Tx[] = [
+    { id: 'i', kind: 'income', amountCents: 150000, occurredOn: '2026-11-02' },
+    { id: 'big', kind: 'expense', amountCents: 10000, occurredOn: '2026-11-02', categoryId: 'groceries' },
+  ];
+  const day1 = computeAllowance({ cycle: c30, transactions: txs, categories, budgetLines: [], today: '2026-11-02' });
+  assert.equal(day1.dailyAllowanceCents, 5000);   // 1500 € ÷ 30 days
+  assert.equal(day1.leftTodayCents, -5000);       // until midnight: 50 − 100 = −50 €
+  const day2 = computeAllowance({ cycle: c30, transactions: txs, categories, budgetLines: [], today: '2026-11-03' });
+  assert.equal(day2.dailyAllowanceCents, Math.floor(140000 / 29)); // 1400 € left ÷ 29 days = 48,27 €
+  assert.equal(day2.leftTodayCents, Math.floor(140000 / 29));      // a fresh day, nothing spent yet
+});
+
 test('week is Monday–Sunday, clipped to the pay cycle', () => {
   const c = { startDate: '2026-10-23', endDate: '2026-11-24' };
   assert.deepEqual(weekWithinCycle('2026-10-29', c), { start: '2026-10-26', end: '2026-11-01' }); // Thu

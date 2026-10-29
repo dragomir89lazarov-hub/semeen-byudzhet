@@ -7,7 +7,7 @@ import type { Tx } from '../data/types';
 import { dLabel, eur } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
-import { Btn, Check, Chip, Chips, Field, H2, Input, Row, T, useToast } from '../ui/kit';
+import { Btn, Chip, Chips, Field, H2, Input, Row, T, useToast } from '../ui/kit';
 import { SheetInit, txMeta } from '../ui/nav';
 import type { Receipt } from '../engine/receipt';
 import { readReceiptImage } from '../lib/receiptReader';
@@ -37,7 +37,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
   const [armDelete, setArmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
-  const [newCat, setNewCat] = useState(false); const [newCatName, setNewCatName] = useState(''); const [newCatFixed, setNewCatFixed] = useState(false); const [newCatErr, setNewCatErr] = useState('');
+  const [newCat, setNewCat] = useState(false); const [newCatName, setNewCatName] = useState(''); const [newCatErr, setNewCatErr] = useState('');
   const baseVersion = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -64,8 +64,8 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
     if (!name) return setNewCatErr('Въведете име.');
     const existing = m.categories.find(k => !k.archived && k.name.toLowerCase() === name.toLowerCase());
     if (existing) { setCategoryId(existing.id); setNewCat(false); setNewCatName(''); return; }
-    const id = await s.addCategory(name, newCatFixed);
-    setCategoryId(id); setNewCat(false); setNewCatName(''); setNewCatFixed(false); setNewCatErr('');
+    const id = await s.addCategory(name, false);
+    setCategoryId(id); setNewCat(false); setNewCatName(''); setNewCatErr('');
     toast('Видът е добавен');
   }
 
@@ -180,7 +180,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
                         <Btn variant="primary" title="Добави" onPress={addInlineCategory} />
                       </View>
                     </Field>
-                    <Row><Check label="Фиксирана сметка" value={newCatFixed} onChange={setNewCatFixed} /><Btn variant="link" title="Отказ" onPress={() => { setNewCat(false); setNewCatName(''); setNewCatErr(''); }} /></Row>
+                    <Row><View /><Btn variant="link" title="Отказ" onPress={() => { setNewCat(false); setNewCatName(''); setNewCatErr(''); }} /></Row>
                     {newCatErr ? <T small style={{ color: t.bad }}>{newCatErr}</T> : null}
                   </View>
                 ) : null}

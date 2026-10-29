@@ -2,10 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { currentCycle } from './src/data/derive';
+import { currentCycle, today } from './src/data/derive';
 import { StoreProvider, useStore } from './src/data/store';
 import { dLabel } from './src/lib/format';
 import { supabase } from './src/lib/supabase';
@@ -87,6 +87,14 @@ function Main() {
   const [txFilter, setTxFilter] = useState('all');
   const [sheet, setSheet] = useState<SheetInit | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  // At midnight (phone clock) every limit is recomputed: re-render when the date changes.
+  const [day, setDay] = useState(today());
+  useEffect(() => {
+    const check = () => setDay(d => (d === today() ? d : today()));
+    const timer = setInterval(check, 20000);
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') check(); });
+    return () => { clearInterval(timer); sub.remove(); };
+  }, []);
   const [metric, setMetricState] = useState<Metric>('today');
   useEffect(() => { AsyncStorage.getItem('metric').then(v => { if (v === 'today' || v === 'week' || v === 'period' || v === 'avg') setMetricState(v); }).catch(() => { }); }, []);
 
@@ -120,7 +128,7 @@ function Main() {
           <Text style={{ color: t.ink, fontSize: 22, fontWeight: '800' }}>Семеен бюджет</Text>
           <Text style={{ color: t.ink2, fontSize: 13 }}>{c ? `${dLabel(c.start)} – ${dLabel(c.end)}` : ''}{s.pending ? ' · ⟳' : ''}</Text>
         </View>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }} key={day}>
           {tab === 'today' ? <TodayScreen /> : tab === 'buckets' ? <BucketsScreen /> : tab === 'history' ? <HistoryScreen /> : <SetupScreen />}
         </View>
 

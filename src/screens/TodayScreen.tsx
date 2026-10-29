@@ -2,13 +2,15 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import * as Engine from '../engine/budgetEngine';
 import {
-  activeCats, bucketOf, computeFund, computePool, currentCycle, defaultFundId, inCycle, poolOf, spentByCat, today, txSort, velocity,
+  activeCats, bucketOf, computeFund, computePool, currentCycle, defaultFundId, inCycle, poolOf, today, txSort, velocity,
 } from '../data/derive';
 import { useStore } from '../data/store';
 import type { Bucket, Cycle, Model } from '../data/types';
 import { days, dLabel, dwLabel, eur, eur0 } from '../lib/format';
-import { catColor, useTheme } from '../lib/theme';
-import { Donut, Track, VelocityChart } from '../ui/charts';
+import { useTheme } from '../lib/theme';
+import { Track, VelocityChart } from '../ui/charts';
+import SpendingViews from '../ui/SpendingViews';
+import { periodName } from '../engine/periods';
 import { Btn, Card, Chip, Chips, H2, Label, NUM, Pill, Row, Screen, T } from '../ui/kit';
 import { TxRow, useNav } from '../ui/nav';
 
@@ -93,17 +95,13 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
   else msg = `В график: около ${eur(r.projectedEndBalanceCents)} ще останат до заплата.`;
   const vals = { today: r.leftTodayCents, week: r.leftThisWeekCents, period: r.remainingCents, avg: r.averageDailyRemainingCents };
   const explain = {
-    today: `Дневен лимит ${eur(r.dailyAllowanceCents)} − похарчено днес ${eur(r.spentTodayCents)}`,
+    today: `Дневен лимит ${eur(r.dailyAllowanceCents)} (остатъкът в полунощ ÷ ${days(r.daysLeft)}) − похарчено днес ${eur(r.spentTodayCents)}`,
     week: `Лимит за ${dLabel(r.weekStart)} – ${dLabel(r.weekEnd)}: ${eur(r.weekAllowanceCents)} − похарчено тази седмица ${eur(r.spentThisWeekCents)}`,
     period: `За оставащите ${days(r.daysLeft)}, до ${dwLabel(c.end)} включително`,
     avg: `${eur(r.remainingCents)} ÷ ${days(r.daysLeft)} до края на периода`,
   }[nav.metric];
   const series = velocity(m, c);
   const last = series[series.length - 1];
-  const spent = spentByCat(m, c);
-  const cats = activeCats(m);
-  const rows = cats.map(k => ({ k, v: spent[k.id] || 0, plan: c.budgets[k.id] || 0 }));
-  const totalSpent = Object.values(spent).reduce((a, b) => a + b, 0);
   const recent = m.txs.filter(x => inCycle(x, c)).sort(txSort).slice(0, 5);
   return (
     <Screen>
@@ -111,38 +109,28 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
         <Row><Label>★ {pool.name}</Label><Pill status={r.status} text={STATUS_TEXT[r.status]} /></Row>
         <BigNumber value={vals[nav.metric]} label={METRIC_LABEL[nav.metric]} explain={explain} bad={vals[nav.metric] < 0 || r.status === 'overdrawn' || r.status === 'overspending'} />
         <Metrics vals={vals} />
+        {r.leftTodayCents < 0 ? (
+          <View style={{ backgroundColor: t.badSoft, borderRadius: 12, padding: 10 }}>
+            <T small style={{ color: t.bad }}>Днешният лимит е превишен с {eur(-r.leftTodayCents)}. В полунощ лимитът се изчислява наново от реалния остатък, разделен на оставащите дни, така че разходът се разпределя по целия период.</T>
+          </View>
+        ) : null}
         <T>{msg} <Text style={{ color: t.ink2 }}>Заплата: {dwLabel(Engine.addDays(c.end, 1))}</Text></T>
-        <View style={{ gap: 6 }}>
-          <Row><T muted small>Изминало време {Math.round(timePct)}%</T><T muted small>Използван бюджет {Math.round(usedPct)}%</T></Row>
-          <Track t={t} pct={timePct} color={t.ink2} />
-          <Track t={t} pct={usedPct} color={usedPct > timePct + 5 ? t.bad : t.accent} />
+        <View style={{ gap: 8 }}>
+          <View style={{ gap: 4 }}><T muted small>Изминало време: {Math.round(timePct)}%</T><Track t={t} pct={timePct} color={t.ink2} /></View>
+          <View style={{ gap: 4 }}><T muted small>Използван бюджет: {Math.round(usedPct)}%</T><Track t={t} pct={usedPct} color={usedPct > timePct + 5 ? t.bad : t.accent} /></View>
         </View>
-        <Kpis items={[['Похарчено', r.spentFixedCents + r.spentFlexibleCents], ['Заделено за сметки', r.fixedReservedCents], ['Внесено във фондове', r.netToBucketsCents]]} />
+        <Kpis items={[['Похарчено', r.spentFixedCents + r.spentFlexibleCents], ['Дневен лимит', r.dailyAllowanceCents], ['Внесено във фондове', r.netToBucketsCents]]} />
       </Card>
 
       <Card>
-        <Row><H2>Темп на харчене</H2><T muted small>гъвкави разходи</T></Row>
+        <Row><H2>Темп на харчене</H2><T muted small>спрямо равномерното харчене</T></Row>
         {last ? <T muted small>{last.actualCents > last.safeCents ? `${eur0(last.actualCents - last.safeCents)} над равномерния темп` : `${eur0(last.safeCents - last.actualCents)} под равномерния темп`}</T> : null}
         <VelocityChart t={t} series={series} budget={flexBudget} total={Engine.daysInclusive(c.start, c.end)} start={c.start} end={c.end} />
       </Card>
 
       <Card>
-        <Row><H2>Къде отидоха парите</H2><T muted small>този период</T></Row>
-        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-          <Donut t={t} total={totalSpent} parts={rows.map(r2 => ({ color: catColor(t, r2.k.color), value: r2.v }))} />
-          <View style={{ flex: 1, gap: 8 }}>
-            {rows.map(({ k, v, plan }) => (
-              <Pressable key={k.id} onPress={() => { nav.setTxFilter(k.id); nav.setSub('txs'); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, k.color) }} />
-                <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5 }}>{k.name}</Text>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[{ color: plan && v > plan ? t.bad : t.ink, fontSize: 13.5 }, NUM]}>{eur0(v)}</Text>
-                  {plan ? <Text style={[{ color: t.ink2, fontSize: 11.5 }, NUM]}>от {eur0(plan)}</Text> : null}
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+        <Row><H2>Къде отидоха парите</H2><T muted small>{periodName(c.start, c.end)}</T></Row>
+        <SpendingViews m={m} c={c} />
       </Card>
 
       <Card>
@@ -160,8 +148,8 @@ function FundToday({ m, c, b }: { m: Model; c: Cycle; b: Bucket }) {
   const clock = Engine.cycleClock({ startDate: c.start, endDate: c.end }, today());
   const vals = { today: f.leftTodayCents, week: f.leftThisWeekCents, period: f.balanceCents, avg: f.averageDailyRemainingCents };
   const explain = {
-    today: `Дял за днес ${eur(f.dailyAllowanceCents)} − платено днес ${eur(f.spentTodayCents)}`,
-    week: `Дял за ${dLabel(f.weekStart)} – ${dLabel(f.weekEnd)}: ${eur(f.weekAllowanceCents)} − платено тази седмица ${eur(f.spentThisWeekCents)}`,
+    today: `Дневен лимит ${eur(f.dailyAllowanceCents)} (наличността в полунощ ÷ ${days(f.daysLeft)}) − платено днес ${eur(f.spentTodayCents)}`,
+    week: `Лимит за ${dLabel(f.weekStart)} – ${dLabel(f.weekEnd)}: ${eur(f.weekAllowanceCents)} − платено тази седмица ${eur(f.spentThisWeekCents)}`,
     period: `Наличност във фонда за оставащите ${days(f.daysLeft)}, до ${dwLabel(c.end)} включително`,
     avg: `${eur(f.balanceCents)} ÷ ${days(f.daysLeft)} до края на периода`,
   }[nav.metric];

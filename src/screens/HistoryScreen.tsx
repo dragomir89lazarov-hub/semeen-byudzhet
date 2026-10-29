@@ -1,110 +1,168 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { activeCats, computePool, currentCycle, sortedCycles, spentByCat, today } from '../data/derive';
+// History: one date filter at the top (presets or custom From/To). Every section below
+// shows only what falls inside the chosen range, and the range is named after its month(s).
+import React, { useMemo, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { periodName } from '../engine/periods';
+import { catOf, computePool, currentCycle, sortedCycles, today } from '../data/derive';
 import { useStore } from '../data/store';
+import type { Cycle, Model, Tx } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
-import { MiniBars } from '../ui/charts';
-import { Card, H2, Label, NUM, Pill, Row, Screen, T } from '../ui/kit';
+import DateButton from '../ui/DateButton';
+import { Card, Chip, Chips, Field, H2, Label, NUM, Row, Screen, T } from '../ui/kit';
+
+type Preset = 'current' | 'previous' | 'last3' | 'year' | 'all' | 'custom';
+const PRESETS: [Preset, string][] = [['current', 'Текущ период'], ['previous', 'Предишен'], ['last3', 'Последните 3'], ['year', 'Тази година'], ['all', 'Всичко']];
+
+function rangeFor(p: Preset, m: Model): { from: string; to: string } {
+  const td = today(); const cs = sortedCycles(m); const cur = currentCycle(m);
+  const i = cur ? cs.findIndex(c => c.id === cur.id) : -1;
+  if (p === 'current' && cur) return { from: cur.start, to: cur.end };
+  if (p === 'previous' && i > 0) return { from: cs[i - 1].start, to: cs[i - 1].end };
+  if (p === 'last3' && i >= 0) return { from: cs[Math.max(0, i - 2)].start, to: cs[i].end };
+  if (p === 'year') return { from: `${td.slice(0, 4)}-01-01`, to: `${td.slice(0, 4)}-12-31` };
+  if (p === 'all') {
+    const first = [cs[0]?.start, ...m.txs.map(t => t.occurredOn)].filter(Boolean).sort()[0] || td;
+    const last = [cs[cs.length - 1]?.end, td].filter(Boolean).sort().reverse()[0] as string;
+    return { from: first, to: last };
+  }
+  return cur ? { from: cur.start, to: cur.end } : { from: td, to: td };
+}
+
+const within = (d: string, from: string, to: string) => d >= from && d <= to;
+
+function byCategory(m: Model, txs: Tx[]) {
+  const map = new Map<string, { id: string; name: string; color: number; cents: number; count: number }>();
+  for (const x of txs) if (x.kind === 'expense') {
+    const k = catOf(m, x.categoryId);
+    const id = x.categoryId || 'none';
+    const row = map.get(id) || { id, name: k?.name || 'Без категория', color: k?.color ?? 3, cents: 0, count: 0 };
+    row.cents += x.amountCents; row.count += 1; map.set(id, row);
+  }
+  return [...map.values()].sort((a, b) => b.cents - a.cents);
+}
 
 export default function HistoryScreen() {
   const t = useTheme();
   const { model: m } = useStore();
+  const [preset, setPreset] = useState<Preset>('current');
+  const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const cs = sortedCycles(m);
-  if (!cs.length) return <Screen><Card><H2>Още няма периоди</H2></Card></Screen>;
-  const td = today(); const cur = currentCycle(m); const cats = activeCats(m);
-  const sums = cs.map(c => {
-    const done = td > c.end; const r = computePool(m, c, done ? c.end : td);
-    return { c, r, done, spent: r.spentFixedCents + r.spentFlexibleCents, byCat: spentByCat(m, c), current: cur?.id === c.id };
-  });
-  const recent = sums.slice(-6);
-  const done = recent.filter(s => s.done);
-  const yr = td.slice(0, 4);
-  const ytd: Record<string, number> = {}; let ytdTotal = 0, ytdIncome = 0;
-  for (const x of m.txs) if (x.occurredOn.slice(0, 4) === yr) {
-    if (x.kind === 'expense' && !x.bucketId) { ytd[x.categoryId!] = (ytd[x.categoryId!] || 0) + x.amountCents; ytdTotal += x.amountCents; }
-    if (x.kind === 'income') ytdIncome += x.amountCents;
-  }
-  const n = sums.filter(s => s.done).length;
-  const avgCycle = n ? sums.filter(s => s.done).reduce((a, s) => a + s.spent, 0) / n : 0;
-  const cyclesThisYear = Math.max(1, sums.filter(s => s.c.start.slice(0, 4) === yr || s.c.end.slice(0, 4) === yr).length);
+  const range = preset === 'custom' && custom ? custom : rangeFor(preset, m);
+  const { from, to } = range;
+  const name = periodName(from, to);
+  const txs = useMemo(() => m.txs.filter(x => within(x.occurredOn, from, to)), [m.txs, from, to]);
+
+  const expenses = txs.filter(x => x.kind === 'expense');
+  const spentAll = expenses.reduce((a, x) => a + x.amountCents, 0);
+  const spentFunds = expenses.filter(x => x.bucketId).reduce((a, x) => a + x.amountCents, 0);
+  const income = txs.filter(x => x.kind === 'income').reduce((a, x) => a + x.amountCents, 0);
+  const saved = txs.reduce((a, x) => a + (x.kind === 'bucket_deposit' ? x.amountCents : x.kind === 'bucket_withdrawal' ? -x.amountCents : 0), 0);
+  const cats = byCategory(m, txs);
+  const cycles = sortedCycles(m).filter(c => c.start <= to && c.end >= from).reverse();
+  const setRange = (r: { from: string; to: string }) => { setPreset('custom'); setCustom(r.from <= r.to ? r : { from: r.to, to: r.from }); };
 
   return (
     <Screen>
+      <Card style={{ gap: 12 }}>
+        <Chips>
+          {PRESETS.map(([k, l]) => <Chip key={k} label={l} selected={preset === k} onPress={() => { setPreset(k); setOpen(null); }} />)}
+          <Chip label="Избрани дати" selected={preset === 'custom'} onPress={() => setRange(range)} />
+        </Chips>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Field label="От"><DateButton value={from} onChange={v => setRange({ from: v, to })} /></Field>
+          <Field label="До"><DateButton value={to} onChange={v => setRange({ from, to: v })} /></Field>
+        </View>
+      </Card>
+
       <Card style={{ borderRadius: 18 }}>
-        <Label>От началото на {yr} г.</Label>
-        <Text style={[{ color: t.ink, fontSize: 44, fontWeight: '800', letterSpacing: -1.2 }, NUM]}>{eur0(ytdTotal)} <Text style={{ fontSize: 18, fontWeight: '500', color: t.ink2 }}>похарчено</Text></Text>
-        <T muted small>Приходи {eur0(ytdIncome)} · Среден период {eur0(avgCycle)} от {n} {n === 1 ? 'приключил период' : 'приключили периода'}</T>
+        <Label>Похарчено · {name}</Label>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={[{ color: t.ink, fontSize: 44, fontWeight: '800', letterSpacing: -1.2 }, NUM]}>{eur0(spentAll)}</Text>
+        <T muted small>{dLabel(from)} – {dLabel(to)} · от общия бюджет {eur0(spentAll - spentFunds)} · от фондове {eur0(spentFunds)}</T>
+        <T muted small>Приходи {eur0(income)} · внесено във фондове {eur0(saved)}</T>
       </Card>
 
       <Card style={{ gap: 0 }}>
-        <H2>Периоди</H2>
-        {[...sums].reverse().map((s, i) => (
-          <View key={s.c.id}>
-            <Pressable onPress={() => setOpen(open === s.c.id ? null : s.c.id)} style={{ paddingVertical: 12, borderTopWidth: i ? 1 : 0, borderTopColor: t.line, gap: 3 }}>
-              <Row>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[{ color: t.ink, fontWeight: '700' }, NUM]}>{dLabel(s.c.start)} – {dLabel(s.c.end)}</Text>
-                  {s.current ? <Pill status="on_track" text="Сега" /> : null}
-                </View>
-                <Text style={[{ color: t.ink, fontWeight: '700' }, NUM]}>{eur0(s.spent)} <Text style={{ color: t.ink2, fontWeight: '400', fontSize: 13 }}>похарчено</Text></Text>
-              </Row>
-              <Row>
-                <T muted small>Приходи {eur0(s.r.incomeCents)} · Спестено {eur0(s.r.netToBucketsCents)}</T>
-                <T small style={{ color: s.r.remainingCents < 0 ? t.bad : t.ink2 }}>{s.done ? 'Остатък' : 'Досега'} {eur0(s.r.remainingCents)}</T>
-              </Row>
-            </Pressable>
-            {open === s.c.id ? (
-              <View style={{ gap: 6, paddingBottom: 12 }}>
-                {cats.map(k => (
-                  <View key={k.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, k.color) }} />
-                    <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5 }}>{k.name}</Text>
-                    <Text style={[{ color: t.ink, fontSize: 13.5 }, NUM]}>{eur0(s.byCat[k.id] || 0)}{s.c.budgets[k.id] ? <Text style={{ color: t.ink2 }}> от {eur0(s.c.budgets[k.id])}</Text> : null}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ))}
+        <Row><H2>Периоди</H2><T muted small>{cycles.length} {cycles.length === 1 ? 'период' : 'периода'}</T></Row>
+        {cycles.length ? cycles.map((c, i) => (
+          <CycleRow key={c.id} m={m} c={c} from={from} to={to} first={i === 0}
+            expanded={cycles.length === 1 || open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} />
+        )) : <T muted small style={{ paddingTop: 8 }}>Няма периоди в избраните дати.</T>}
       </Card>
 
       <Card style={{ gap: 0 }}>
-        <Row><H2>Тенденции по категории</H2><T muted small>{recent.length} периода</T></Row>
-        <T muted small style={{ marginTop: 4, marginBottom: 6 }}>Промяната сравнява последните два приключили периода. Избледнелият стълб е текущият период.</T>
-        {cats.map((k, i) => {
-          const a = done[done.length - 1]?.byCat[k.id] || 0, b = done[done.length - 2]?.byCat[k.id] || 0;
-          const ch = b ? Math.round(((a - b) / b) * 100) : null;
-          return (
-            <View key={k.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderTopColor: t.line }}>
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={{ color: t.ink, fontWeight: '500' }}>{k.name}</Text>
-                <Text style={[{ color: t.ink2, fontSize: 12.5 }, NUM]}>{eur0(a)} миналия период</Text>
-              </View>
-              <MiniBars values={recent.map(s => s.byCat[k.id] || 0)} color={catColor(t, k.color)} doneFlags={recent.map(s => s.done)} />
-              <Text style={[{ width: 52, textAlign: 'right', fontWeight: '700', fontSize: 12.5, color: ch === null ? t.ink2 : ch > 0 ? t.bad : ch < 0 ? t.good : t.ink2 }, NUM]}>
-                {ch === null ? '—' : `${ch > 0 ? '+' : ''}${ch}%`}
-              </Text>
+        <H2>По категории · {name}</H2>
+        {cats.length ? (
+          <>
+            <View style={{ flexDirection: 'row', paddingTop: 10, paddingBottom: 4 }}>
+              <Text style={{ flex: 1, color: t.ink2, fontSize: 12, fontWeight: '700' }}>Категория</Text>
+              <Text style={{ width: 84, textAlign: 'right', color: t.ink2, fontSize: 12, fontWeight: '700' }}>Сума</Text>
+              <Text style={{ width: 48, textAlign: 'right', color: t.ink2, fontSize: 12, fontWeight: '700' }}>Дял</Text>
+              <Text style={{ width: 44, textAlign: 'right', color: t.ink2, fontSize: 12, fontWeight: '700' }}>Бр.</Text>
             </View>
-          );
-        })}
-      </Card>
-
-      <Card>
-        <H2>По категории от началото на годината</H2>
-        <ScrollView horizontal>
-          <View style={{ minWidth: '100%' }}>
-            {[['Категория', yr, 'Дял', 'На период'], ...cats.map(k => [k.name, eur0(ytd[k.id] || 0), `${ytdTotal ? Math.round(((ytd[k.id] || 0) / ytdTotal) * 100) : 0}%`, eur0((ytd[k.id] || 0) / cyclesThisYear)])].map((cells, i) => (
-              <View key={i} style={{ flexDirection: 'row', paddingVertical: 7, borderTopWidth: i ? 1 : 0, borderTopColor: t.line }}>
-                {cells.map((cell, j) => (
-                  <Text key={j} numberOfLines={1} style={[{ width: j === 0 ? 150 : 72, textAlign: j === 0 ? 'left' : 'right', color: i === 0 ? t.ink2 : t.ink, fontSize: i === 0 ? 12 : 13.5, fontWeight: i === 0 ? '700' : '400' }, NUM]}>{cell}</Text>
-                ))}
+            {cats.map(r => (
+              <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.line, gap: 6 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, r.color) }} />
+                <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5 }}>{r.name}</Text>
+                <Text style={[{ width: 84, textAlign: 'right', color: t.ink, fontSize: 13.5, fontWeight: '600' }, NUM]}>{eur0(r.cents)}</Text>
+                <Text style={[{ width: 48, textAlign: 'right', color: t.ink2, fontSize: 13 }, NUM]}>{spentAll ? Math.round((r.cents / spentAll) * 100) : 0}%</Text>
+                <Text style={[{ width: 44, textAlign: 'right', color: t.ink2, fontSize: 13 }, NUM]}>{r.count}</Text>
               </View>
             ))}
-          </View>
-        </ScrollView>
+            <View style={{ flexDirection: 'row', paddingVertical: 8, borderTopWidth: 2, borderTopColor: t.line }}>
+              <Text style={{ flex: 1, color: t.ink, fontWeight: '700' }}>Общо</Text>
+              <Text style={[{ width: 84, textAlign: 'right', color: t.ink, fontWeight: '800' }, NUM]}>{eur0(spentAll)}</Text>
+              <View style={{ width: 92 }} />
+            </View>
+          </>
+        ) : <T muted small style={{ paddingTop: 8 }}>Няма разходи в избраните дати.</T>}
       </Card>
     </Screen>
   );
 }
+
+function CycleRow({ m, c, from, to, first, expanded, onToggle }: {
+  m: Model; c: Cycle; from: string; to: string; first: boolean; expanded: boolean; onToggle: () => void;
+}) {
+  const t = useTheme();
+  const a = c.start > from ? c.start : from, b = c.end < to ? c.end : to;     // part of the cycle inside the filter
+  const txs = m.txs.filter(x => within(x.occurredOn, a, b));
+  const spent = txs.filter(x => x.kind === 'expense').reduce((s, x) => s + x.amountCents, 0);
+  const income = txs.filter(x => x.kind === 'income').reduce((s, x) => s + x.amountCents, 0);
+  const whole = a === c.start && b === c.end;
+  const td = today(); const done = td > c.end; const current = !done && td >= c.start;
+  const left = whole ? computePool(m, c, done ? c.end : td).remainingCents : null;
+  const cats = byCategory(m, txs);
+  return (
+    <View>
+      <Pressable onPress={onToggle} style={{ paddingVertical: 12, borderTopWidth: first ? 0 : 1, borderTopColor: t.line, gap: 3 }}>
+        <Row>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.ink, fontWeight: '700', fontSize: 15 }}>{periodName(c.start, c.end)}{current ? ' · сега' : ''}</Text>
+            <Text style={[{ color: t.ink2, fontSize: 12.5 }, NUM]}>{dLabel(c.start)} – {dLabel(c.end)}{whole ? '' : ` (показано ${dLabel(a)} – ${dLabel(b)})`}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={[{ color: t.ink, fontWeight: '700' }, NUM]}>{eur0(spent)}</Text>
+            <Text style={[{ color: t.ink2, fontSize: 12 }, NUM]}>похарчено</Text>
+          </View>
+        </Row>
+        <Row>
+          <T muted small>Приходи {eur0(income)}</T>
+          {left !== null ? <T small style={{ color: left < 0 ? t.bad : t.ink2 }}>{done ? 'Остатък' : 'Остатък досега'} {eur0(left)}</T> : null}
+        </Row>
+      </Pressable>
+      {expanded ? (
+        <View style={{ gap: 6, paddingBottom: 12 }}>
+          {cats.length ? cats.map(r => (
+            <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, r.color) }} />
+              <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5 }}>{r.name}</Text>
+              <Text style={[{ color: t.ink, fontSize: 13.5 }, NUM]}>{eur0(r.cents)}{c.budgets[r.id] ? <Text style={{ color: t.ink2 }}> от {eur0(c.budgets[r.id])}</Text> : null}</Text>
+            </View>
+          )) : <T muted small>Няма разходи.</T>}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+

@@ -1,13 +1,11 @@
 // Pure helpers that turn the model into what the screens show. All money math goes through the tested engine.
 import * as Engine from '../engine/budgetEngine';
-import { TIME_ZONE } from '../config';
 import type { Bucket, Category, Cycle, Model, Tx } from './types';
 
+/** Today's date from the phone's own clock and time zone ("YYYY-MM-DD"). */
 export function today(): string {
-  try { return Engine.todayIn(TIME_ZONE); } catch {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export const toEngineTx = (t: Tx): Engine.Tx => ({ id: t.id, kind: t.kind, amountCents: t.amountCents, occurredOn: t.occurredOn, categoryId: t.categoryId, bucketId: t.bucketId });

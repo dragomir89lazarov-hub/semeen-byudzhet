@@ -7,7 +7,7 @@ import { useStore } from '../data/store';
 import { dLabel, dwLabel, eur } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
-import { Btn, Card, Check, Chip, Field, H2, Input, Row, Screen, T, useToast } from '../ui/kit';
+import { Btn, Card, Check, Chip, Field, H2, Input, Screen, T, useToast } from '../ui/kit';
 
 const centsText = (c: number | undefined) => (c ? (c / 100).toFixed(2).replace('.', ',') : '');
 
@@ -24,14 +24,14 @@ export default function SetupScreen() {
   const [payDay, setPayDay] = useState(String(rule.day));
   const [weekend, setWeekend] = useState(rule.weekend || 'previous_business_day');
   const [plan, setPlan] = useState<Record<string, string>>({});
-  const [newCat, setNewCat] = useState(''); const [newCatFixed, setNewCatFixed] = useState(false);
+  const [newCat, setNewCat] = useState('');
   const [newBucket, setNewBucket] = useState(''); const [newTarget, setNewTarget] = useState('');
-  const [people, setPeople] = useState(m.settings.people); const [buffer, setBuffer] = useState(centsText(m.settings.bufferCents));
+  const [people, setPeople] = useState(m.settings.people);
   const [updateMsg, setUpdateMsg] = useState('');
 
   useEffect(() => { setStart(c?.start || ''); setEnd(c?.end || ''); }, [c?.id, c?.start, c?.end]);
   useEffect(() => { if (c) setPlan(Object.fromEntries(cats.map(k => [k.id, centsText(c.budgets[k.id])]))); }, [c?.id, JSON.stringify(c?.budgets), cats.length]);
-  useEffect(() => { setPeople(m.settings.people); setBuffer(centsText(m.settings.bufferCents)); }, [m.settings.people.join('|'), m.settings.bufferCents]);
+  useEffect(() => { setPeople(m.settings.people); }, [m.settings.people.join('|')]);
 
   const next = c ? sortedCycles(m).find(x => x.start > c.end) : null;
   const prop = c ? Engine.proposeNextCycle({ startDate: c.start, endDate: c.end }, rule) : null;
@@ -118,11 +118,11 @@ export default function SetupScreen() {
       {c ? (
         <Card>
           <H2>План за този период</H2>
-          <T muted small>Категориите, отбелязани като фиксирани сметки, се заделят от дневния лимит, докато не бъдат платени. Останалите се показват като цели в „Днес“.</T>
+          <T muted small>Планираните суми се показват като цели в „Къде отидоха парите“ (напр. „120 € от 650 €“). Не променят дневния лимит.</T>
           {cats.map(k => (
             <View key={k.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, k.color) }} />
-              <Text numberOfLines={2} style={{ flex: 1, color: t.ink }}>{k.name}{k.fixed ? <Text style={{ color: t.ink2, fontSize: 13 }}>  фиксирана</Text> : null}</Text>
+              <Text numberOfLines={2} style={{ flex: 1, color: t.ink }}>{k.name}</Text>
               <Input style={{ width: 110, textAlign: 'right' }} keyboardType="decimal-pad" placeholder="0 €" value={plan[k.id] || ''} onChangeText={v => setPlan(p => ({ ...p, [k.id]: v }))} />
             </View>
           ))}
@@ -133,17 +133,16 @@ export default function SetupScreen() {
       <Card>
         <H2>Категории</H2>
         {cats.map(k => (
-          <Row key={k.id}>
+          <View key={k.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, k.color) }} />
             <Text numberOfLines={1} style={{ flex: 1, color: t.ink }}>{k.name}</Text>
-            <Check label="Фиксирана сметка" value={k.fixed} onChange={async v => { await s.setCategoryFixed(k.id, v); toast(v ? 'Отбелязано като фиксирана сметка' : 'Отбелязано като гъвкав разход'); }} />
-          </Row>
+          </View>
         ))}
         <Input placeholder="Нова категория" value={newCat} onChangeText={setNewCat} />
-        <Check label="Фиксирана сметка" value={newCatFixed} onChange={setNewCatFixed} />
         <Btn title="Добави категория" style={{ alignSelf: 'flex-start' }} onPress={async () => {
           const name = newCat.trim(); if (!name) return toast('Въведете име на категория.');
           if (m.categories.some(k => k.name.toLowerCase() === name.toLowerCase())) return toast('Вече има категория с това име.');
-          await s.addCategory(name, newCatFixed); setNewCat(''); setNewCatFixed(false); toast('Категорията е добавена');
+          await s.addCategory(name, false); setNewCat(''); toast('Категорията е добавена');
         }} />
       </Card>
 
@@ -164,11 +163,8 @@ export default function SetupScreen() {
         {people.map((p, i) => (
           <Field key={i} label={`Човек ${i + 1}`}><Input value={p} onChangeText={v => setPeople(ps => ps.map((x, j) => (j === i ? v : x)))} /></Field>
         ))}
-        <Field label="Предпазен резерв извън дневния лимит (€)"><Input keyboardType="decimal-pad" placeholder="0" value={buffer} onChangeText={setBuffer} /></Field>
         <Btn title="Запази" style={{ alignSelf: 'flex-start' }} onPress={async () => {
-          const buf = buffer.trim() ? Engine.parseAmountToCents(buffer) : 0;
-          if (buf === null) return toast('Проверете сумата за резерва.');
-          await s.updateSettings({ people: people.map((p, i) => p.trim() || m.settings.people[i]), bufferCents: buf }); toast('Записано');
+          await s.updateSettings({ people: people.map((p, i) => p.trim() || m.settings.people[i]) }); toast('Записано');
         }} />
       </Card>
 
