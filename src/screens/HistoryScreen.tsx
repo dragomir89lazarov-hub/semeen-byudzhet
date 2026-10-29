@@ -3,13 +3,14 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { periodName } from '../engine/periods';
-import { catOf, computePool, currentCycle, sortedCycles, today } from '../data/derive';
+import { catOf, computePool, currentCycle, sortedCycles, today, txSort } from '../data/derive';
 import { useStore } from '../data/store';
 import type { Cycle, Model, Tx } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
-import { Card, Chip, Chips, Field, H2, Label, NUM, Row, Screen, T } from '../ui/kit';
+import { Btn, Card, Chip, Chips, Field, H2, Label, NUM, Row, Screen, T } from '../ui/kit';
+import { TxRow, useNav } from '../ui/nav';
 
 type Preset = 'current' | 'previous' | 'last3' | 'year' | 'all' | 'custom';
 const PRESETS: [Preset, string][] = [['current', 'Текущ период'], ['previous', 'Предишен'], ['last3', 'Последните 3'], ['year', 'Тази година'], ['all', 'Всичко']];
@@ -48,6 +49,8 @@ export default function HistoryScreen() {
   const [preset, setPreset] = useState<Preset>('current');
   const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [shown, setShown] = useState(30);
+  const nav = useNav();
   const range = preset === 'custom' && custom ? custom : rangeFor(preset, m);
   const { from, to } = range;
   const name = periodName(from, to);
@@ -116,6 +119,14 @@ export default function HistoryScreen() {
             </View>
           </>
         ) : <T muted small style={{ paddingTop: 8 }}>Няма разходи в избраните дати.</T>}
+      </Card>
+
+      <Card style={{ gap: 0 }}>
+        <Row><H2>Записи</H2><T muted small>{txs.length} · докоснете запис, за да го промените</T></Row>
+        {txs.length ? [...txs].sort(txSort).slice(0, shown).map((x, i) => (
+          <TxRow key={x.id} m={m} tx={x} first={i === 0} onPress={() => nav.openSheet({ editId: x.id })} />
+        )) : <T muted small style={{ paddingTop: 8 }}>Няма записи в избраните дати.</T>}
+        {txs.length > shown ? <Btn variant="link" title={`Покажи още (${txs.length - shown})`} onPress={() => setShown(n => n + 50)} style={{ alignSelf: 'flex-start' }} /> : null}
       </Card>
     </Screen>
   );

@@ -3,7 +3,7 @@ import type { PaydayRule, TxKind } from '../engine/budgetEngine';
 // ── Rows exactly as they live in Supabase ──────────────────────────────
 export interface HouseholdRow {
   id: string; name: string; payday_rule: PaydayRule; people: string[]; buffer_cents: number;
-  default_fund_id: string | null; invite_code: string; version: number; updated_at?: string;
+  default_fund_id: string | null; invite_code: string; version: number; updated_at?: string; reset_at?: string | null;
 }
 export interface CycleRow { id: string; household_id: string; start_date: string; end_date: string; carryover_cents: number; version: number; updated_at?: string }
 export interface CategoryRow { id: string; household_id: string; name: string; color: number; is_fixed: boolean; is_archived: boolean; sort_order: number; version: number; updated_at?: string }

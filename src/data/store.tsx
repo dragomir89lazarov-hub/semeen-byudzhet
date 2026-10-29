@@ -10,6 +10,7 @@ import type {
 } from './types';
 import { TABLE } from './types';
 import type { PaydayRule } from '../engine/budgetEngine';
+import { cycleAroundToday } from './derive';
 
 type Status = 'loading' | 'nohousehold' | 'ready' | 'error';
 interface Op { key: string; kind: 'upsert' | 'update'; table: string; row: Record<string, unknown>; id?: string; onConflict?: string }
@@ -76,7 +77,10 @@ interface Store {
   deleteTx(id: string): Promise<void>;
   addCategory(name: string, fixed: boolean): Promise<string>;
   setCategoryFixed(id: string, fixed: boolean): Promise<void>;
+  updateCategory(id: string, patch: { name?: string; archived?: boolean }): Promise<void>;
   addBucket(name: string, targetCents: number | null): Promise<void>;
+  updateBucket(id: string, patch: { name?: string; targetCents?: number | null; archived?: boolean }): Promise<void>;
+  resetAll(): Promise<boolean>;
   updateSettings(patch: { people?: string[]; bufferCents?: number; payday?: PaydayRule; defaultFund?: string }): Promise<void>;
   saveCycle(c: { id?: string; start: string; end: string; carryoverCents?: number }): Promise<string>;
   saveBudgets(cycleId: string, budgets: Record<string, number>): Promise<void>;
@@ -206,7 +210,15 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
         (p: any) => { if (p.new && Object.keys(p.new).length) merge(key, p.new); });
     });
     ch.on('postgres_changes' as any, { event: 'UPDATE', schema: 'public', table: 'households', filter: `id=eq.${hid}` },
-      (p: any) => setHousehold(old => (!old || p.new.version >= old.version ? { ...old, ...p.new } : old)));
+      (p: any) => {
+        // the other phone pressed "Изчисти всички данни": drop pending writes and reload everything
+        if (p.new?.reset_at && p.new.reset_at !== householdRef.current?.reset_at) {
+          outbox.current = []; saveOutbox();
+          setTables(EMPTY);
+          loadFromServer(hid).catch(() => { });
+        }
+        setHousehold(old => (!old || p.new.version >= old.version ? { ...old, ...p.new } : old));
+      });
     ch.subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [hid, merge]);
@@ -282,6 +294,8 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
       await put('txs', { ...strip(existing as any), deleted_at: new Date().toISOString() });
     },
     async addCategory(name, fixed) {
+      const old = tablesRef.current.categories.find(c => c.is_archived && c.name.toLowerCase() === name.toLowerCase());
+      if (old) { await put('categories', { ...strip(old as any), is_archived: false }); return old.id; }
       const id = uuid();
       const order = Math.max(-1, ...tablesRef.current.categories.map(c => c.sort_order)) + 1;
       await put('categories', { id, household_id: hidRef.current, name, is_fixed: fixed, color: order % 8, sort_order: order, is_archived: false });
@@ -291,7 +305,37 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
       const c = tablesRef.current.categories.find(x => x.id === id); if (!c) return;
       await put('categories', { ...strip(c as any), is_fixed: fixed });
     },
+    async updateCategory(id, patch) {
+      const c = tablesRef.current.categories.find(x => x.id === id); if (!c) return;
+      await put('categories', { ...strip(c as any), ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}) });
+    },
+    async updateBucket(id, patch) {
+      const b = tablesRef.current.buckets.find(x => x.id === id); if (!b) return;
+      await put('buckets', { ...strip(b as any), ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.targetCents !== undefined ? { target_cents: patch.targetCents } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}) });
+      if (patch.archived && householdRef.current?.default_fund_id === id) {
+        const pool = tablesRef.current.buckets.find(x => x.kind === 'pool');
+        if (pool) await store.updateSettings({ defaultFund: pool.id });
+      }
+    },
+    async resetAll() {
+      const h = hidRef.current; if (!h) return false;
+      const { error } = await supabase.rpc('reset_household');
+      if (error) { setLastError(humanError(error.message)); return false; }
+      outbox.current = []; await saveOutbox();
+      setTables(EMPTY);
+      try { await AsyncStorage.removeItem(`cache:${h}`); } catch { }
+      await loadFromServer(h);
+      const rule = householdRef.current?.payday_rule || { type: 'monthly_day', day: 25, weekend: 'previous_business_day' };
+      const c = cycleAroundToday(rule as PaydayRule);
+      const { error: e2 } = await supabase.from('pay_cycles').insert({ household_id: h, start_date: c.start, end_date: c.end });
+      if (e2) setLastError(humanError(e2.message));
+      await loadFromServer(h);
+      return true;
+    },
     async addBucket(name, targetCents) {
+      const old = tablesRef.current.buckets.find(b => b.is_archived && b.name.toLowerCase() === name.toLowerCase());
+      if (old) { await put('buckets', { ...strip(old as any), is_archived: false, target_cents: targetCents }); return; }
       const order = Math.max(-1, ...tablesRef.current.buckets.map(b => b.sort_order)) + 1;
       await put('buckets', { id: uuid(), household_id: hidRef.current, name, kind: 'savings', target_cents: targetCents, color: (order + 4) % 8, sort_order: order, is_archived: false });
     },
