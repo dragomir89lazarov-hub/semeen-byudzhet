@@ -16,8 +16,9 @@ export type ReadResult =
   | { ok: true; data: RawReceipt; model: string }
   | { ok: false; error: 'limit' | 'not_configured' | 'unreadable' | 'failed'; detail?: string };
 
-// 'gemini-flash-latest' follows Google's newest Flash model; the others are fallbacks when it's busy or retired.
-const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+// Measured 29 Oct 2026 on a sample receipt: gemini-3.5-flash 9 s, 3-flash-preview 21 s, flash-latest 40 s (2.5-flash retired).
+// The others are fallbacks for when the first is busy or retired.
+const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-flash-latest'];
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export function buildPrompt(categories: CategoryHint[], today: string): string {

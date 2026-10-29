@@ -1,0 +1,31 @@
+# Adds libraries in the versions that match the app's Expo release and saves package-lock.json.
+name: "7 · Добави библиотеки"
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Имена на библиотеките, разделени с интервал"
+        required: true
+permissions:
+  contents: write
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Install
+        env:
+          PKGS: ${{ inputs.packages }}
+        run: npx expo install $PKGS > /tmp/i.txt 2>&1 || { echo "::error title=Инсталиране::$(tail -c 800 /tmp/i.txt | tr '\n' ' ')"; exit 1; }
+      - name: Save
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json app.json
+          git commit -m "Библиотеки: ${{ inputs.packages }}" || echo "Nothing to commit"
+          git push
+          echo "::notice title=Добавени::$(node -e "const p=require('./package.json');console.log(process.argv.slice(1).map(n=>n+'@'+(p.dependencies[n]||'?')).join(', '))" ${{ inputs.packages }})"

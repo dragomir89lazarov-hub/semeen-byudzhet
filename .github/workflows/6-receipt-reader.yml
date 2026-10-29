@@ -31,7 +31,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          GEMINI_TRY: gemini-flash-latest,gemini-3.5-flash,gemini-3-flash-preview,gemini-3.8-flash,gemini-2.5-flash,gemini-flash-lite-latest
+          GEMINI_TRY: ${{ vars.GEMINI_TRY }}   # e.g. "gemini-3.5-flash,gemini-flash-latest" to compare models
         run: node --experimental-strip-types scripts/test-receipt.ts
       - name: Install the function in Supabase
         env:
