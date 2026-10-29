@@ -15,6 +15,7 @@ export interface Nav {
   tab: Tab; setTab(t: Tab): void; sub: string | null; setSub(s: string | null): void;
   txFilter: string; setTxFilter(f: string): void; openSheet(init: SheetInit): void;
   metric: Metric; setMetric(m: Metric): void;
+  grouped: boolean; setGrouped(g: boolean): void;
 }
 export const NavCtx = createContext<Nav | null>(null);
 export const useNav = () => { const n = useContext(NavCtx); if (!n) throw new Error('NavCtx missing'); return n; };
@@ -26,6 +27,21 @@ export function txMeta(m: Model, t: Tx, colors: string[]) {
   if (t.kind === 'bucket_withdrawal') { const b = bucketOf(m, t.bucketId); return { title: 'От ' + (b?.name || 'фонд'), color: c(b?.color), mark: '←', sign: '+', income: true, from: '' }; }
   const k = catOf(m, t.categoryId); const b = t.bucketId ? bucketOf(m, t.bucketId) : null;
   return { title: k?.name || 'Разход', color: c(k?.color), mark: (k?.name || '?').slice(0, 2), sign: '−', income: false, from: b ? 'от ' + b.name : '' };
+}
+
+/** "Подробно | Групи" switch for statistics; hidden while no category is in a group. */
+export function GroupToggle({ m }: { m: Model }) {
+  const t = useTheme(); const nav = useNav();
+  if (!m.categories.some(c => !c.archived && c.group)) return null;
+  return (
+    <View style={{ flexDirection: 'row', backgroundColor: t.sunk, borderRadius: 10, padding: 2, gap: 2 }}>
+      {([[false, 'Подробно'], [true, 'Групи']] as const).map(([g, l]) => (
+        <Pressable key={l} onPress={() => nav.setGrouped(g)} style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, backgroundColor: nav.grouped === g ? t.surface : 'transparent' }}>
+          <Text style={{ fontSize: 12.5, fontWeight: '700', color: nav.grouped === g ? t.ink : t.ink2 }}>{l}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 }
 
 export function TxRow({ m, tx, onPress, first }: { m: Model; tx: Tx; onPress?: () => void; first?: boolean }) {

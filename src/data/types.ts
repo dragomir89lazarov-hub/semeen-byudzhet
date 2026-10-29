@@ -6,7 +6,7 @@ export interface HouseholdRow {
   default_fund_id: string | null; invite_code: string; version: number; updated_at?: string; reset_at?: string | null;
 }
 export interface CycleRow { id: string; household_id: string; start_date: string; end_date: string; carryover_cents: number; version: number; updated_at?: string }
-export interface CategoryRow { id: string; household_id: string; name: string; color: number; is_fixed: boolean; is_archived: boolean; sort_order: number; version: number; updated_at?: string }
+export interface CategoryRow { id: string; household_id: string; name: string; color: number; is_fixed: boolean; is_archived: boolean; sort_order: number; group_name?: string | null; version: number; updated_at?: string }
 export interface BudgetRow { household_id: string; cycle_id: string; category_id: string; planned_cents: number; version: number; updated_at?: string }
 export interface BucketRow {
   id: string; household_id: string; name: string; kind: 'pool' | 'savings'; color: number; target_cents: number | null;
@@ -34,7 +34,7 @@ export const TABLE: Record<TableKey, string> = {
 // ── Shapes the screens work with ───────────────────────────────────────
 export interface Settings { people: string[]; payday: PaydayRule; bufferCents: number; defaultFund: string | null; inviteCode: string }
 export interface Cycle { id: string; start: string; end: string; carryoverCents: number; budgets: Record<string, number> }
-export interface Category { id: string; name: string; color: number; fixed: boolean; archived: boolean; order: number }
+export interface Category { id: string; name: string; color: number; fixed: boolean; archived: boolean; order: number; group: string | null }
 export interface Bucket { id: string; name: string; kind: 'pool' | 'savings'; color: number; targetCents: number | null; targetDate: string | null; archived: boolean; order: number }
 export interface Tx {
   id: string; kind: TxKind; amountCents: number; occurredOn: string; categoryId: string | null; bucketId: string | null;

@@ -96,6 +96,8 @@ function Main() {
     return () => { clearInterval(timer); sub.remove(); };
   }, []);
   const [metric, setMetricState] = useState<Metric>('today');
+  const [grouped, setGroupedState] = useState(false);
+  useEffect(() => { AsyncStorage.getItem('grouped').then(v => setGroupedState(v === '1')).catch(() => { }); }, []);
   useEffect(() => { AsyncStorage.getItem('metric').then(v => { if (v === 'today' || v === 'week' || v === 'period' || v === 'avg') setMetricState(v); }).catch(() => { }); }, []);
 
   // Android back button: close the sheet, then leave sub-screens, then go to Today.
@@ -114,7 +116,8 @@ function Main() {
     tab, setTab: (x: Tab) => { setTab(x); setSub(null); }, sub, setSub, txFilter, setTxFilter,
     openSheet: (init: SheetInit) => setSheet(init), metric,
     setMetric: (x: Metric) => { setMetricState(x); AsyncStorage.setItem('metric', x).catch(() => { }); },
-  }), [tab, sub, txFilter, metric]);
+    grouped, setGrouped: (g: boolean) => { setGroupedState(g); AsyncStorage.setItem('grouped', g ? '1' : '0').catch(() => { }); },
+  }), [tab, sub, txFilter, metric, grouped]);
 
   if (s.status === 'loading') return <Loading />;
   if (s.status === 'error') return <ErrorScreen />;

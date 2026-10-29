@@ -42,7 +42,7 @@ function toModel(h: HouseholdRow | null, t: Tables): Model {
       inviteCode: h?.invite_code || '',
     },
     cycles: t.cycles.map(c => ({ id: c.id, start: c.start_date, end: c.end_date, carryoverCents: Number(c.carryover_cents || 0), budgets: budgets[c.id] || {} })),
-    categories: t.categories.map(c => ({ id: c.id, name: c.name, color: c.color, fixed: c.is_fixed, archived: c.is_archived, order: c.sort_order })),
+    categories: t.categories.map(c => ({ id: c.id, name: c.name, color: c.color, fixed: c.is_fixed, archived: c.is_archived, order: c.sort_order, group: c.group_name?.trim() || null })),
     buckets: t.buckets.map(b => ({ id: b.id, name: b.name, kind: b.kind, color: b.color, targetCents: b.target_cents == null ? null : Number(b.target_cents), targetDate: b.target_date, archived: b.is_archived, order: b.sort_order })),
     txs: t.txs.filter(x => !x.deleted_at).map(rowToTx),
   };
@@ -77,7 +77,8 @@ interface Store {
   deleteTx(id: string): Promise<void>;
   addCategory(name: string, fixed: boolean): Promise<string>;
   setCategoryFixed(id: string, fixed: boolean): Promise<void>;
-  updateCategory(id: string, patch: { name?: string; archived?: boolean }): Promise<void>;
+  updateCategory(id: string, patch: { name?: string; archived?: boolean; group?: string | null }): Promise<void>;
+  renameGroup(from: string, to: string | null): Promise<void>;
   addBucket(name: string, targetCents: number | null): Promise<void>;
   updateBucket(id: string, patch: { name?: string; targetCents?: number | null; archived?: boolean }): Promise<void>;
   resetAll(): Promise<boolean>;
@@ -307,7 +308,13 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
     },
     async updateCategory(id, patch) {
       const c = tablesRef.current.categories.find(x => x.id === id); if (!c) return;
-      await put('categories', { ...strip(c as any), ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}) });
+      await put('categories', { ...strip(c as any), ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}),
+        ...(patch.group !== undefined ? { group_name: patch.group } : {}) });
+    },
+    async renameGroup(from, to) {
+      for (const c of tablesRef.current.categories.filter(x => (x.group_name || '').trim() === from)) {
+        await put('categories', { ...strip(c as any), group_name: to });
+      }
     },
     async updateBucket(id, patch) {
       const b = tablesRef.current.buckets.find(x => x.id === id); if (!b) return;

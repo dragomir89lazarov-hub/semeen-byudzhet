@@ -1,12 +1,13 @@
 import * as Updates from 'expo-updates';
 import React, { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import * as Engine from '../engine/budgetEngine';
 import { activeCats, computePool, currentCycle, cycleError, sortedCycles } from '../data/derive';
 import { useStore } from '../data/store';
 import { dLabel, dwLabel, eur } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
+import CategoryManager from './CategoryManager';
 import { Btn, Card, Check, Chip, Field, H2, Input, Screen, T, useToast } from '../ui/kit';
 
 const centsText = (c: number | undefined) => (c ? (c / 100).toFixed(2).replace('.', ',') : '');
@@ -25,7 +26,6 @@ export default function SetupScreen() {
   const [weekend, setWeekend] = useState(rule.weekend || 'previous_business_day');
   const [plan, setPlan] = useState<Record<string, string>>({});
   const [newCat, setNewCat] = useState('');
-  const [editCat, setEditCat] = useState<string | null>(null); const [editName, setEditName] = useState(''); const [armCat, setArmCat] = useState(false);
   const [resetText, setResetText] = useState(''); const [resetting, setResetting] = useState(false);
   const [newBucket, setNewBucket] = useState(''); const [newTarget, setNewTarget] = useState('');
   const [people, setPeople] = useState(m.settings.people);
@@ -133,31 +133,7 @@ export default function SetupScreen() {
       ) : null}
 
       <Card>
-        <H2>Категории</H2>
-        <T muted small>Докоснете категория, за да я преименувате или изтриете. Старите разходи в изтрита категория остават в историята.</T>
-        {cats.map(k => editCat === k.id ? (
-          <View key={k.id} style={{ gap: 8, backgroundColor: t.accentSoft, borderRadius: 12, padding: 10 }}>
-            <Input value={editName} onChangeText={setEditName} autoFocus />
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Btn variant="primary" title="Запази" onPress={async () => {
-                const name = editName.trim(); if (!name) return toast('Въведете име.');
-                if (m.categories.some(x => x.id !== k.id && x.name.toLowerCase() === name.toLowerCase())) return toast('Вече има категория с това име.');
-                await s.updateCategory(k.id, { name }); setEditCat(null); toast('Категорията е преименувана');
-              }} />
-              <Btn title="Отказ" onPress={() => setEditCat(null)} />
-              <Btn variant={armCat ? 'dangerSolid' : 'danger'} title={armCat ? 'Натиснете отново за изтриване' : 'Изтрий'} onPress={async () => {
-                if (!armCat) return setArmCat(true);
-                await s.updateCategory(k.id, { archived: true }); setEditCat(null); toast(`„${k.name}“ е изтрита`);
-              }} />
-            </View>
-          </View>
-        ) : (
-          <Pressable key={k.id} onPress={() => { setEditCat(k.id); setEditName(k.name); setArmCat(false); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, k.color) }} />
-            <Text numberOfLines={1} style={{ flex: 1, color: t.ink }}>{k.name}</Text>
-            <Text style={{ color: t.ink2 }}>✎</Text>
-          </Pressable>
-        ))}
+        <CategoryManager />
         <Input placeholder="Нова категория" value={newCat} onChangeText={setNewCat} />
         <Btn title="Добави категория" style={{ alignSelf: 'flex-start' }} onPress={async () => {
           const name = newCat.trim(); if (!name) return toast('Въведете име на категория.');

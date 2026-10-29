@@ -10,7 +10,7 @@ import { dLabel, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
 import { Btn, Card, Chip, Chips, Field, H2, Label, NUM, Row, Screen, T } from '../ui/kit';
-import { TxRow, useNav } from '../ui/nav';
+import { GroupToggle, TxRow, useNav } from '../ui/nav';
 
 type Preset = 'current' | 'previous' | 'last3' | 'year' | 'all' | 'custom';
 const PRESETS: [Preset, string][] = [['current', 'Текущ период'], ['previous', 'Предишен'], ['last3', 'Последните 3'], ['year', 'Тази година'], ['all', 'Всичко']];
@@ -32,13 +32,15 @@ function rangeFor(p: Preset, m: Model): { from: string; to: string } {
 
 const within = (d: string, from: string, to: string) => d >= from && d <= to;
 
-function byCategory(m: Model, txs: Tx[]) {
-  const map = new Map<string, { id: string; name: string; color: number; cents: number; count: number }>();
+/** Expenses per category, or per group when "Групи" is on (ids = the categories counted in the row). */
+function byCategory(m: Model, txs: Tx[], grouped: boolean) {
+  const map = new Map<string, { id: string; name: string; color: number; cents: number; count: number; ids: Set<string>; isGroup: boolean }>();
   for (const x of txs) if (x.kind === 'expense') {
     const k = catOf(m, x.categoryId);
-    const id = x.categoryId || 'none';
-    const row = map.get(id) || { id, name: k?.name || 'Без категория', color: k?.color ?? 3, cents: 0, count: 0 };
-    row.cents += x.amountCents; row.count += 1; map.set(id, row);
+    const isGroup = grouped && !!k?.group;
+    const id = isGroup ? 'g:' + k!.group : x.categoryId || 'none';
+    const row = map.get(id) || { id, name: isGroup ? k!.group! : k?.name || 'Без категория', color: k?.color ?? 3, cents: 0, count: 0, ids: new Set<string>(), isGroup };
+    row.cents += x.amountCents; row.count += 1; if (x.categoryId) row.ids.add(x.categoryId); map.set(id, row);
   }
   return [...map.values()].sort((a, b) => b.cents - a.cents);
 }
@@ -61,7 +63,7 @@ export default function HistoryScreen() {
   const spentFunds = expenses.filter(x => x.bucketId).reduce((a, x) => a + x.amountCents, 0);
   const income = txs.filter(x => x.kind === 'income').reduce((a, x) => a + x.amountCents, 0);
   const saved = txs.reduce((a, x) => a + (x.kind === 'bucket_deposit' ? x.amountCents : x.kind === 'bucket_withdrawal' ? -x.amountCents : 0), 0);
-  const cats = byCategory(m, txs);
+  const cats = byCategory(m, txs, nav.grouped);
   const cycles = sortedCycles(m).filter(c => c.start <= to && c.end >= from).reverse();
   const setRange = (r: { from: string; to: string }) => { setPreset('custom'); setCustom(r.from <= r.to ? r : { from: r.to, to: r.from }); };
 
@@ -94,7 +96,7 @@ export default function HistoryScreen() {
       </Card>
 
       <Card style={{ gap: 0 }}>
-        <H2>По категории · {name}</H2>
+        <Row><H2>По {nav.grouped ? 'групи' : 'категории'} · {name}</H2><GroupToggle m={m} /></Row>
         {cats.length ? (
           <>
             <View style={{ flexDirection: 'row', paddingTop: 10, paddingBottom: 4 }}>
@@ -106,7 +108,7 @@ export default function HistoryScreen() {
             {cats.map(r => (
               <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.line, gap: 6 }}>
                 <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, r.color) }} />
-                <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5 }}>{r.name}</Text>
+                <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5, fontWeight: r.isGroup ? '700' : '400' }}>{r.name}</Text>
                 <Text style={[{ width: 84, textAlign: 'right', color: t.ink, fontSize: 13.5, fontWeight: '600' }, NUM]}>{eur0(r.cents)}</Text>
                 <Text style={[{ width: 48, textAlign: 'right', color: t.ink2, fontSize: 13 }, NUM]}>{spentAll ? Math.round((r.cents / spentAll) * 100) : 0}%</Text>
                 <Text style={[{ width: 44, textAlign: 'right', color: t.ink2, fontSize: 13 }, NUM]}>{r.count}</Text>
@@ -143,7 +145,8 @@ function CycleRow({ m, c, from, to, first, expanded, onToggle }: {
   const whole = a === c.start && b === c.end;
   const td = today(); const done = td > c.end; const current = !done && td >= c.start;
   const left = whole ? computePool(m, c, done ? c.end : td).remainingCents : null;
-  const cats = byCategory(m, txs);
+  const nav = useNav();
+  const cats = byCategory(m, txs, nav.grouped);
   return (
     <View>
       <Pressable onPress={onToggle} style={{ paddingVertical: 12, borderTopWidth: first ? 0 : 1, borderTopColor: t.line, gap: 3 }}>
@@ -168,7 +171,7 @@ function CycleRow({ m, c, from, to, first, expanded, onToggle }: {
             <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: catColor(t, r.color) }} />
               <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5 }}>{r.name}</Text>
-              <Text style={[{ color: t.ink, fontSize: 13.5 }, NUM]}>{eur0(r.cents)}{c.budgets[r.id] ? <Text style={{ color: t.ink2 }}> от {eur0(c.budgets[r.id])}</Text> : null}</Text>
+              <Text style={[{ color: t.ink, fontSize: 13.5 }, NUM]}>{eur0(r.cents)}{(() => { const plan = [...r.ids].reduce((a, id) => a + (c.budgets[id] || 0), 0); return plan ? <Text style={{ color: t.ink2 }}> от {eur0(plan)}</Text> : null; })()}</Text>
             </View>
           )) : <T muted small>Няма разходи.</T>}
         </View>

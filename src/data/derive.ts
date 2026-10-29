@@ -66,3 +66,33 @@ export function cycleError(msg: string | null): string | null {
   if (/62/.test(msg)) return 'Период над 62 дни вероятно е грешка.';
   return 'Застъпва се с друг период.';
 }
+
+// ── Category groups (display only: expenses keep their own category) ─────────────
+export interface StatItem { key: string; name: string; color: number; ids: string[]; isGroup: boolean }
+
+/** What the statistics show: each category, or (grouped) one row per group plus the ungrouped categories. */
+export function statItems(m: Model, grouped: boolean): StatItem[] {
+  const out: StatItem[] = []; const byGroup = new Map<string, StatItem>();
+  const cats = [...m.categories].sort((a, b) => a.order - b.order);
+  for (const c of cats) {
+    if (grouped && c.group) {
+      let g = byGroup.get(c.group);
+      if (!g) { g = { key: 'g:' + c.group, name: c.group, color: c.color, ids: [], isGroup: true }; byGroup.set(c.group, g); out.push(g); }
+      g.ids.push(c.id);
+    } else out.push({ key: c.id, name: c.name, color: c.color, ids: [c.id], isGroup: false });
+  }
+  return out;
+}
+export function statKeyOf(m: Model, categoryId: string | null, grouped: boolean): string {
+  const c = catOf(m, categoryId);
+  return grouped && c?.group ? 'g:' + c.group : categoryId || 'none';
+}
+/** Spending from the salaries fund in a cycle, per statistic row. */
+export function spentByStat(m: Model, c: Cycle, grouped: boolean): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const t of m.txs) if (t.kind === 'expense' && !t.bucketId && inCycle(t, c)) {
+    const k = statKeyOf(m, t.categoryId, grouped); out[k] = (out[k] || 0) + t.amountCents;
+  }
+  return out;
+}
+export const groupNames = (m: Model) => [...new Set(m.categories.filter(c => !c.archived && c.group).map(c => c.group as string))].sort((a, b) => a.localeCompare(b, 'bg'));

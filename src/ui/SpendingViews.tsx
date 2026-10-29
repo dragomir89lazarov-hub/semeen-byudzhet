@@ -3,14 +3,14 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Line, Polyline, Text as SvgText } from 'react-native-svg';
 import * as Engine from '../engine/budgetEngine';
-import { activeCats, sortedCycles, spentByCat, today } from '../data/derive';
+import { sortedCycles, spentByStat, statItems, today } from '../data/derive';
 import type { Cycle, Model } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
 import { periodName } from '../engine/periods';
 import { catColor, useTheme } from '../lib/theme';
 import { Donut } from './charts';
 import { NUM, T } from './kit';
-import { useNav } from './nav';
+import { GroupToggle, useNav } from './nav';
 
 type View4 = 'share' | 'line' | 'bubbles' | 'pyramid';
 const LABELS: [View4, string][] = [['share', 'Дялове'], ['line', 'Линии'], ['bubbles', 'Кръгове'], ['pyramid', 'Пирамида']];
@@ -18,13 +18,17 @@ const LABELS: [View4, string][] = [['share', 'Дялове'], ['line', 'Лини
 export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
   const t = useTheme(); const nav = useNav();
   const [view, setView] = useState<View4>('share');
-  const cats = activeCats(m);
-  const spent = spentByCat(m, c);
-  const rows = cats.map(k => ({ k, v: spent[k.id] || 0, plan: c.budgets[k.id] || 0, color: catColor(t, k.color) }));
+  const items = statItems(m, nav.grouped);
+  const spent = spentByStat(m, c, nav.grouped);
+  // archived categories only show up when they have spending in this period
+  const rows = items
+    .filter(it => (spent[it.key] || 0) > 0 || it.ids.some(id => !m.categories.find(k => k.id === id)?.archived))
+    .map(it => ({ k: { id: it.key, name: it.name }, ids: it.ids, v: spent[it.key] || 0, plan: it.ids.reduce((a, id) => a + (c.budgets[id] || 0), 0), color: catColor(t, it.color), isGroup: it.isGroup }));
   const total = rows.reduce((a, r) => a + r.v, 0);
 
   return (
     <View style={{ gap: 12 }}>
+      <GroupToggle m={m} />
       <View style={{ flexDirection: 'row', backgroundColor: t.sunk, borderRadius: 12, padding: 3, gap: 3 }}>
         {LABELS.map(([k, l]) => (
           <Pressable key={k} onPress={() => setView(k)} accessibilityState={{ selected: view === k }}
@@ -38,10 +42,10 @@ export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
         <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
           <Donut t={t} total={total} parts={rows.map(r => ({ color: r.color, value: r.v }))} />
           <View style={{ flex: 1, gap: 8 }}>
-            {rows.map(({ k, v, plan, color }) => (
-              <Pressable key={k.id} onPress={() => { nav.setTxFilter(k.id); nav.setSub('txs'); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {rows.map(({ k, v, plan, color, isGroup }) => (
+              <Pressable key={k.id} onPress={() => { if (!k.id.startsWith('g:')) { nav.setTxFilter(k.id); nav.setSub('txs'); } }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color }} />
-                <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5 }}>{k.name}</Text>
+                <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5, fontWeight: isGroup ? '700' : '400' }}>{k.name}</Text>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={[{ color: plan && v > plan ? t.bad : t.ink, fontSize: 13.5 }, NUM]}>{eur0(v)}</Text>
                   {plan ? <Text style={[{ color: t.ink2, fontSize: 11.5 }, NUM]}>от {eur0(plan)}</Text> : null}
@@ -55,7 +59,7 @@ export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
   );
 }
 
-type Row = { k: { id: string; name: string }; v: number; color: string };
+type Row = { k: { id: string; name: string }; ids: string[]; v: number; color: string };
 
 /** Cumulative spending per category, day by day through today. */
 function Lines({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
@@ -68,7 +72,7 @@ function Lines({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
     let cum = 0; const pts: number[] = [];
     for (let i = 0; i < lastDay; i++) {
       const d = Engine.addDays(c.start, i);
-      cum += m.txs.filter(x => x.kind === 'expense' && !x.bucketId && x.categoryId === r.k.id && x.occurredOn === d).reduce((a, x) => a + x.amountCents, 0);
+      cum += m.txs.filter(x => x.kind === 'expense' && !x.bucketId && !!x.categoryId && r.ids.includes(x.categoryId) && x.occurredOn === d).reduce((a, x) => a + x.amountCents, 0);
       pts.push(cum);
     }
     return { r, pts };
@@ -125,7 +129,8 @@ function Bubbles({ rows, total }: { rows: Row[]; total: number }) {
 function Pyramid({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
   const t = useTheme();
   const prev = [...sortedCycles(m)].reverse().find(x => x.end < c.start) || null;
-  const prevSpent = prev ? spentByCat(m, prev) : {};
+  const nav = useNav();
+  const prevSpent = prev ? spentByStat(m, prev, nav.grouped) : {};
   const data = rows.map(r => ({ ...r, p: prevSpent[r.k.id] || 0 })).filter(r => r.v > 0 || r.p > 0);
   if (!data.length) return <T muted small>Още няма разходи за сравнение.</T>;
   const max = Math.max(1, ...data.map(r => Math.max(r.v, r.p)));
