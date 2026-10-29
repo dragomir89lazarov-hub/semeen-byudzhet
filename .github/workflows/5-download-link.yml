@@ -10,7 +10,7 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npx eas-cli@latest build:list --platform android --status finished --limit 1 --json --non-interactive > /tmp/b.json
+          npx eas-cli@latest build:list --platform android --status finished --limit 1 --json --non-interactive > /tmp/b.json 2> /tmp/e.txt || { echo "::error title=eas build:list::$(tail -c 700 /tmp/e.txt | tr '\n' ' ') $(head -c 300 /tmp/b.json | tr '\n' ' ')"; exit 1; }
           URL=$(node -e "const b=require('/tmp/b.json');const x=b[0]||{};console.log(x.artifacts?.buildUrl||x.artifacts?.applicationArchiveUrl||'')")
           PAGE=$(node -e "const b=require('/tmp/b.json');const x=b[0]||{};console.log(x.id?'https://expo.dev/accounts/'+(x.project?.ownerAccount?.name||'')+'/projects/'+(x.project?.slug||'semeen-byudzhet')+'/builds/'+x.id:'')")
           echo "::notice title=APK::$URL"
