@@ -18,7 +18,7 @@ import QuickAddSheet from './src/screens/QuickAddSheet';
 import SetupScreen from './src/screens/SetupScreen';
 import TodayScreen from './src/screens/TodayScreen';
 import { T, ToastProvider } from './src/ui/kit';
-import { Nav, NavCtx, SheetInit, Tab } from './src/ui/nav';
+import { Metric, Nav, NavCtx, SheetInit, Tab } from './src/ui/nav';
 
 export default function App() {
   return (
@@ -84,8 +84,8 @@ function Main() {
   const [sub, setSub] = useState<string | null>(null);
   const [txFilter, setTxFilter] = useState('all');
   const [sheet, setSheet] = useState<SheetInit | null>(null);
-  const [metric, setMetricState] = useState<'today' | 'period' | 'avg'>('today');
-  useEffect(() => { AsyncStorage.getItem('metric').then(v => { if (v === 'today' || v === 'period' || v === 'avg') setMetricState(v); }).catch(() => { }); }, []);
+  const [metric, setMetricState] = useState<Metric>('today');
+  useEffect(() => { AsyncStorage.getItem('metric').then(v => { if (v === 'today' || v === 'week' || v === 'period' || v === 'avg') setMetricState(v); }).catch(() => { }); }, []);
 
   // Android back button: close the sheet, then leave sub-screens, then go to Today.
   useEffect(() => {
@@ -101,7 +101,7 @@ function Main() {
   const nav: Nav = useMemo(() => ({
     tab, setTab: (x: Tab) => { setTab(x); setSub(null); }, sub, setSub, txFilter, setTxFilter,
     openSheet: (init: SheetInit) => setSheet(init), metric,
-    setMetric: (x: 'today' | 'period' | 'avg') => { setMetricState(x); AsyncStorage.setItem('metric', x).catch(() => { }); },
+    setMetric: (x: Metric) => { setMetricState(x); AsyncStorage.setItem('metric', x).catch(() => { }); },
   }), [tab, sub, txFilter, metric]);
 
   if (s.status === 'loading') return <Loading />;

@@ -7,13 +7,14 @@ import { catColor, useTheme } from '../lib/theme';
 import { NUM } from './kit';
 
 export type Tab = 'today' | 'buckets' | 'history' | 'setup';
+export type Metric = 'today' | 'week' | 'period' | 'avg';
 export interface SheetInit {
   mode?: 'expense' | 'income' | 'transfer'; editId?: string; source?: string | null; bucketId?: string | null; direction?: 'to_bucket' | 'from_bucket';
 }
 export interface Nav {
   tab: Tab; setTab(t: Tab): void; sub: string | null; setSub(s: string | null): void;
   txFilter: string; setTxFilter(f: string): void; openSheet(init: SheetInit): void;
-  metric: 'today' | 'period' | 'avg'; setMetric(m: 'today' | 'period' | 'avg'): void;
+  metric: Metric; setMetric(m: Metric): void;
 }
 export const NavCtx = createContext<Nav | null>(null);
 export const useNav = () => { const n = useContext(NavCtx); if (!n) throw new Error('NavCtx missing'); return n; };

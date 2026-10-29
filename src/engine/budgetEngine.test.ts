@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   paydayInMonth, nextPayday, proposeNextCycle, cycleClock, validateCycle,
-  computeAllowance, computeBucketAllowance, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
+  computeAllowance, computeBucketAllowance, weekWithinCycle, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
 } from './budgetEngine.ts';
 import type { Tx } from './budgetEngine.ts';
 
@@ -74,6 +74,13 @@ test('allowance: reserves unpaid fixed bills and excludes bucket spending', () =
   assert.equal(r.spentTodayCents, 2500);
   assert.equal(r.leftTodayCents, 5648);
   assert.equal(r.averageDailyRemainingCents, Math.floor(217500 / 27)); // 8055
+  // Week Mon 26 Oct – Sun 1 Nov: spent this week 4000 (27th) + 2500 (29th); the 24th is last week.
+  assert.equal(r.weekStart, '2026-10-26');
+  assert.equal(r.weekEnd, '2026-11-01');
+  assert.equal(r.spentThisWeekCents, 6500);
+  // at Monday: 217500 + 6500 = 224000 over 30 days left (26 Oct – 24 Nov) → 7 days' share
+  assert.equal(r.weekAllowanceCents, Math.floor(224000 * 7 / 30)); // 52266
+  assert.equal(r.leftThisWeekCents, 52266 - 6500);
   assert.equal(r.status, 'on_track');
   // Kids' Fund as the default fund: 50000 in, 9999 paid on the 27th → 40001 over 27 days
   const k = computeBucketAllowance({ bucketId: 'kids', transactions: txs, cycle, today: '2026-10-29' });
@@ -118,6 +125,26 @@ test('velocity series ends at today with an even safe line', () => {
   assert.equal(s.at(-1)!.actualCents, 33000);
   // flexible budget = 430000 − 80000 − 90000 = 260000 over 33 days; day 7 safe = 260000·7/33
   assert.equal(s.at(-1)!.safeCents, Math.round(260000 * 7 / 33));
+});
+
+test('week is Monday–Sunday, clipped to the pay cycle', () => {
+  const c = { startDate: '2026-10-23', endDate: '2026-11-24' };
+  assert.deepEqual(weekWithinCycle('2026-10-29', c), { start: '2026-10-26', end: '2026-11-01' }); // Thu
+  assert.deepEqual(weekWithinCycle('2026-11-01', c), { start: '2026-10-26', end: '2026-11-01' }); // Sunday
+  assert.deepEqual(weekWithinCycle('2026-11-02', c), { start: '2026-11-02', end: '2026-11-08' }); // Monday
+  assert.deepEqual(weekWithinCycle('2026-10-24', c), { start: '2026-10-23', end: '2026-10-25' }); // cycle starts Fri
+  assert.deepEqual(weekWithinCycle('2026-11-24', c), { start: '2026-11-23', end: '2026-11-24' }); // cycle ends Tue
+});
+
+test('fund week share', () => {
+  const k = computeBucketAllowance({ bucketId: 'kids', cycle: { startDate: '2026-10-23', endDate: '2026-11-24' }, today: '2026-10-29',
+    transactions: [
+      { id: 'd', kind: 'bucket_deposit', amountCents: 30000, occurredOn: '2026-10-23', bucketId: 'kids' },
+      { id: 'e', kind: 'expense', amountCents: 2000, occurredOn: '2026-10-27', categoryId: 'kids', bucketId: 'kids' },
+    ] });
+  assert.equal(k.spentThisWeekCents, 2000);
+  assert.equal(k.weekAllowanceCents, Math.floor(30000 * 7 / 30)); // 7000
+  assert.equal(k.leftThisWeekCents, 5000);
 });
 
 test('amount parsing', () => {

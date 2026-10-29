@@ -12,22 +12,22 @@ import { Donut, Track, VelocityChart } from '../ui/charts';
 import { Btn, Card, Chip, Chips, H2, Label, NUM, Pill, Row, Screen, T } from '../ui/kit';
 import { TxRow, useNav } from '../ui/nav';
 
-type Metric = 'today' | 'period' | 'avg';
-const METRIC_LABEL: Record<Metric, string> = { today: 'Остатък за днес', period: 'Остатък до края на периода', avg: 'Среден дневен остатък' };
-const METRIC_SHORT: Record<Metric, string> = { today: 'За днес', period: 'До края', avg: 'На ден' };
+type Metric = 'today' | 'week' | 'period' | 'avg';
+const METRIC_LABEL: Record<Metric, string> = { today: 'Остатък за днес', week: 'Остатък за седмицата', period: 'Остатък до края на периода', avg: 'Среден дневен остатък' };
+const METRIC_SHORT: Record<Metric, string> = { today: 'За днес', week: 'Седмица', period: 'До края', avg: 'На ден' };
 const STATUS_TEXT = { on_track: 'В график', tight: 'На ръба', overspending: 'Твърде бързо', overdrawn: 'Над бюджета' } as const;
 
 function Metrics({ vals }: { vals: Record<Metric, number> }) {
   const t = useTheme(); const nav = useNav();
   return (
     <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-      {(['today', 'period', 'avg'] as Metric[]).map(k => {
+      {(['today', 'week', 'period', 'avg'] as Metric[]).map(k => {
         const on = nav.metric === k;
         return (
           <Pressable key={k} onPress={() => nav.setMetric(k)} accessibilityState={{ selected: on }} accessibilityLabel={METRIC_LABEL[k]}
-            style={{ flex: 1, borderWidth: on ? 2 : 1, borderColor: on ? t.accent : t.line, backgroundColor: on ? t.accentSoft : t.bg, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 9 }}>
+            style={{ flex: 1, minWidth: 0, borderWidth: on ? 2 : 1, borderColor: on ? t.accent : t.line, backgroundColor: on ? t.accentSoft : t.bg, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 7 }}>
             <Text numberOfLines={1} style={{ color: t.ink2, fontSize: 12, fontWeight: '700' }}>{METRIC_SHORT[k]}</Text>
-            <Text numberOfLines={1} adjustsFontSizeToFit style={[{ color: t.ink, fontSize: 14, fontWeight: '700' }, NUM]}>{eur(vals[k])}</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[{ color: t.ink, fontSize: 13.5, fontWeight: '700' }, NUM]}>{eur(vals[k])}</Text>
           </Pressable>
         );
       })}
@@ -91,9 +91,10 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
   else if (r.status === 'overspending' && r.runOutDate) msg = `С това темпо парите ще свършат на ${dwLabel(r.runOutDate)}, ${days(Engine.daysInclusive(r.runOutDate, c.end) - 1)} преди заплата.`;
   else if (r.status === 'tight') msg = `В график, но на ръба: около ${eur(r.projectedEndBalanceCents)} ще останат до заплата.`;
   else msg = `В график: около ${eur(r.projectedEndBalanceCents)} ще останат до заплата.`;
-  const vals = { today: r.leftTodayCents, period: r.remainingCents, avg: r.averageDailyRemainingCents };
+  const vals = { today: r.leftTodayCents, week: r.leftThisWeekCents, period: r.remainingCents, avg: r.averageDailyRemainingCents };
   const explain = {
     today: `Дневен лимит ${eur(r.dailyAllowanceCents)} − похарчено днес ${eur(r.spentTodayCents)}`,
+    week: `Лимит за ${dLabel(r.weekStart)} – ${dLabel(r.weekEnd)}: ${eur(r.weekAllowanceCents)} − похарчено тази седмица ${eur(r.spentThisWeekCents)}`,
     period: `За оставащите ${days(r.daysLeft)}, до ${dwLabel(c.end)} включително`,
     avg: `${eur(r.remainingCents)} ÷ ${days(r.daysLeft)} до края на периода`,
   }[nav.metric];
@@ -157,9 +158,10 @@ function FundToday({ m, c, b }: { m: Model; c: Cycle; b: Bucket }) {
   const nav = useNav();
   const f = computeFund(m, b.id, c);
   const clock = Engine.cycleClock({ startDate: c.start, endDate: c.end }, today());
-  const vals = { today: f.leftTodayCents, period: f.balanceCents, avg: f.averageDailyRemainingCents };
+  const vals = { today: f.leftTodayCents, week: f.leftThisWeekCents, period: f.balanceCents, avg: f.averageDailyRemainingCents };
   const explain = {
     today: `Дял за днес ${eur(f.dailyAllowanceCents)} − платено днес ${eur(f.spentTodayCents)}`,
+    week: `Дял за ${dLabel(f.weekStart)} – ${dLabel(f.weekEnd)}: ${eur(f.weekAllowanceCents)} − платено тази седмица ${eur(f.spentThisWeekCents)}`,
     period: `Наличност във фонда за оставащите ${days(f.daysLeft)}, до ${dwLabel(c.end)} включително`,
     avg: `${eur(f.balanceCents)} ÷ ${days(f.daysLeft)} до края на периода`,
   }[nav.metric];
