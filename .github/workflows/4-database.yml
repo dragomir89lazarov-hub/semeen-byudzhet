@@ -1,6 +1,8 @@
 # Runs a SQL file from the supabase/ folder against your Supabase database,
-# so nobody has to copy long scripts by hand. Needs the SUPABASE_DB_URL secret
-# (Supabase → Connect → Session pooler connection string, with your password filled in).
+# so nobody has to copy long scripts by hand.
+# Needs ONE of these repository secrets:
+#   SUPABASE_DB_PASSWORD – the database password (the server address is found automatically), or
+#   SUPABASE_DB_URL      – a full Session pooler connection string.
 name: "4 · База данни"
 on:
   workflow_dispatch:
@@ -14,27 +16,43 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check the database secret
-        env:
-          DB: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          if [ -z "$DB" ]; then echo "::error title=SUPABASE_DB_URL липсва::Добавете секрета SUPABASE_DB_URL в Settings → Secrets and variables → Actions."; exit 1; fi
-          case "$DB" in *YOUR-PASSWORD*|*\[*) echo "::error title=Паролата не е попълнена::Заменете [YOUR-PASSWORD] с паролата на базата данни."; exit 1;; esac
       - name: Install the PostgreSQL client
         run: which psql || (sudo apt-get update -q && sudo apt-get install -y -q postgresql-client)
+      - name: Find the database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -n "$DB_URL" ]; then
+            psql "$DB_URL" -tAc "select 1" >/dev/null 2>/tmp/err.txt || { echo "::error title=Няма връзка::$(tail -c 500 /tmp/err.txt | tr '\n' ' ')"; exit 1; }
+            echo "PGURL=$DB_URL" >> $GITHUB_ENV; exit 0
+          fi
+          if [ -z "$DB_PASSWORD" ]; then echo "::error title=Липсва парола::Добавете секрета SUPABASE_DB_PASSWORD (паролата на базата данни) в Settings → Secrets and variables → Actions."; exit 1; fi
+          REF=$(node -e "const s=require('fs').readFileSync('src/config.ts','utf8');console.log(s.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)[1])")
+          export PGPASSWORD="$DB_PASSWORD" PGCONNECT_TIMEOUT=6 PGUSER="postgres.$REF" PGDATABASE=postgres PGPORT=5432
+          LAST=""
+          for REGION in eu-central-1 eu-central-2 eu-west-1 eu-west-2 eu-west-3 eu-north-1 us-east-1 us-east-2 us-west-1 ap-southeast-1; do
+            for P in aws-0 aws-1; do
+              H="$P-$REGION.pooler.supabase.com"
+              if OUT=$(PGHOST=$H psql -tAc "select 1" 2>&1); then
+                echo "Found database at $H"; echo "PGHOST=$H" >> $GITHUB_ENV; echo "PGUSER=$PGUSER" >> $GITHUB_ENV; exit 0
+              fi
+              case "$OUT" in *password*|*authentication*) echo "::error title=Грешна парола::Сървърът е намерен ($H), но паролата не е приета. Проверете SUPABASE_DB_PASSWORD."; exit 1;; esac
+              LAST="$H: $OUT"
+            done
+          done
+          echo "::error title=Базата данни не е намерена::$(echo "$LAST" | tail -c 400 | tr '\n' ' ')"; exit 1
       - name: Run the SQL file
         env:
-          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SCRIPT: ${{ inputs.script }}
         run: |
           case "$SCRIPT" in supabase/*.sql) ;; *) echo "::error::Only files in supabase/ can be run."; exit 1;; esac
-          if psql "$DB" -v ON_ERROR_STOP=1 -1 -f "$SCRIPT" > /tmp/out.txt 2>&1; then
+          export PGDATABASE=postgres PGPORT=5432
+          if [ -n "$PGURL" ]; then CONN="$PGURL"; else CONN=""; fi
+          if psql $CONN -v ON_ERROR_STOP=1 -1 -f "$SCRIPT" > /tmp/out.txt 2>&1; then
             echo "::notice title=Готово::$SCRIPT изпълнен успешно."
           else
-            echo "::error title=SQL грешка::$(grep -v '^NOTICE' /tmp/out.txt | tail -c 900 | tr '\n' ' ')"
-            exit 1
+            echo "::error title=SQL грешка::$(grep -v '^NOTICE' /tmp/out.txt | tail -c 900 | tr '\n' ' ')"; exit 1
           fi
-      - name: List the tables
-        env:
-          DB: ${{ secrets.SUPABASE_DB_URL }}
-        run: echo "::notice title=Таблици::$(psql "$DB" -tAc "select string_agg(tablename, ', ' order by tablename) from pg_tables where schemaname='public'")"
+          echo "::notice title=Таблици::$(psql $CONN -tAc "select string_agg(tablename, ', ' order by tablename) from pg_tables where schemaname='public'")"
