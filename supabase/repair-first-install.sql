@@ -1,3 +1,4 @@
+-- ⛔ DO NOT RUN: the app is live with real data since 29 Oct 2026. Running this erases everything.
 -- REPAIR / FIRST INSTALL ONLY
 -- Removes a partly-created database and creates everything from scratch.
 -- ⚠ Deletes all budget data. Use only before you start using the app for real.
