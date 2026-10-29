@@ -1,0 +1,40 @@
+# Runs a SQL file from the supabase/ folder against your Supabase database,
+# so nobody has to copy long scripts by hand. Needs the SUPABASE_DB_URL secret
+# (Supabase → Connect → Session pooler connection string, with your password filled in).
+name: "4 · База данни"
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "SQL файл за изпълнение"
+        required: true
+        default: "supabase/repair-first-install.sql"
+jobs:
+  run-sql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the database secret
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB" ]; then echo "::error title=SUPABASE_DB_URL липсва::Добавете секрета SUPABASE_DB_URL в Settings → Secrets and variables → Actions."; exit 1; fi
+          case "$DB" in *YOUR-PASSWORD*|*\[*) echo "::error title=Паролата не е попълнена::Заменете [YOUR-PASSWORD] с паролата на базата данни."; exit 1;; esac
+      - name: Install the PostgreSQL client
+        run: which psql || (sudo apt-get update -q && sudo apt-get install -y -q postgresql-client)
+      - name: Run the SQL file
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          SCRIPT: ${{ inputs.script }}
+        run: |
+          case "$SCRIPT" in supabase/*.sql) ;; *) echo "::error::Only files in supabase/ can be run."; exit 1;; esac
+          if psql "$DB" -v ON_ERROR_STOP=1 -1 -f "$SCRIPT" > /tmp/out.txt 2>&1; then
+            echo "::notice title=Готово::$SCRIPT изпълнен успешно."
+          else
+            echo "::error title=SQL грешка::$(grep -v '^NOTICE' /tmp/out.txt | tail -c 900 | tr '\n' ' ')"
+            exit 1
+          fi
+      - name: List the tables
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+        run: echo "::notice title=Таблици::$(psql "$DB" -tAc "select string_agg(tablename, ', ' order by tablename) from pg_tables where schemaname='public'")"
