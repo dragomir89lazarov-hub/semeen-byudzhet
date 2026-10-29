@@ -11,7 +11,7 @@ import type {
 import { TABLE } from './types';
 import type { PaydayRule } from '../engine/budgetEngine';
 
-type Status = 'loading' | 'nohousehold' | 'ready';
+type Status = 'loading' | 'nohousehold' | 'ready' | 'error';
 interface Op { key: string; kind: 'upsert' | 'update'; table: string; row: Record<string, unknown>; id?: string; onConflict?: string }
 
 const EMPTY: Tables = { cycles: [], categories: [], budgets: [], buckets: [], txs: [] };
@@ -69,6 +69,7 @@ export interface TxInput {
 interface Store {
   status: Status; userId: string; householdId: string | null; model: Model; pending: number; lastError: string | null;
   refresh(): Promise<void>;
+  retry(): void;
   createHousehold(people: string[], firstCycle: { start: string; end: string }): Promise<string | null>;
   joinHousehold(code: string): Promise<string | null>;
   saveTx(input: TxInput, base?: { version: number; force?: boolean }): Promise<SaveResult>;
@@ -165,19 +166,29 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
     setStatus(s => (s === 'loading' ? 'ready' : s));
   }, [userId, loadFromServer]);
 
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try { const raw = await AsyncStorage.getItem(`outbox:${userId}`); outbox.current = raw ? JSON.parse(raw) : []; setPending(outbox.current.length); } catch { }
       let h: string | null = null;
       try { h = await AsyncStorage.getItem(`hid:${userId}`); } catch { }
-      const { data, error } = await supabase.from('household_members').select('household_id').eq('user_id', userId).limit(1);
-      if (!error) h = data?.[0]?.household_id ?? null;
+      let failure: string | null = null;
+      try {
+        const res = await Promise.race([
+          supabase.from('household_members').select('household_id').eq('user_id', userId).limit(1),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout: сървърът не отговаря')), 15000)),
+        ]);
+        if (res.error) failure = describe(res.error);
+        else h = res.data?.[0]?.household_id ?? null;
+      } catch (e) { failure = describe(e); }
       if (cancelled) return;
-      if (h) start(h); else setStatus(error ? 'loading' : 'nohousehold');
+      if (h) { start(h); return; }
+      if (failure) { setLastError(failure); setStatus('error'); return; }
+      setLastError(null); setStatus('nohousehold');
     })();
     return () => { cancelled = true; };
-  }, [userId, start]);
+  }, [userId, start, attempt]);
 
   // cache to the phone so the app opens instantly and works offline
   useEffect(() => {
@@ -214,6 +225,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
   // ── actions ──────────────────────────────────────────────────────────
   const store: Store = {
     status, userId, householdId: hid, model, pending, lastError,
+    retry: () => { setStatus('loading'); setAttempt(a => a + 1); },
     refresh: async () => { if (hidRef.current) { await flush(); await loadFromServer(hidRef.current); } },
 
     async createHousehold(people, firstCycle) {
@@ -319,4 +331,10 @@ export function humanError(msg: string): string {
   if (/duplicate key.*name|unique/i.test(msg)) return 'Вече има запис с това име.';
   if (/row-level security|permission/i.test(msg)) return 'Нямате права за тази промяна.';
   return 'Неуспешно записване: ' + msg;
+}
+
+/** Full error text for the error screen, so problems can be diagnosed from a screenshot. */
+function describe(e: unknown): string {
+  const x = e as { message?: string; code?: string; details?: string; hint?: string };
+  return [x?.code, x?.message || String(e), x?.details, x?.hint].filter(Boolean).join(' · ');
 }

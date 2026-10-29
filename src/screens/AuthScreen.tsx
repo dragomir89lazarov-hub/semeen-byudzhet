@@ -15,13 +15,19 @@ export default function AuthScreen() {
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setMsg('Въведете валиден имейл.');
     if (password.length < 6) return setMsg('Паролата трябва да е поне 6 знака.');
     setBusy(true);
-    const { error } = mode === 'in'
+    const { data, error } = mode === 'in'
       ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
       : await supabase.auth.signUp({ email: email.trim(), password });
     setBusy(false);
+    if (!error && mode === 'up' && !data?.session) {
+      setMode('in');
+      setMsg('Профилът е създаден. Отворете имейла от Supabase, натиснете връзката за потвърждение и след това влезте тук.');
+      return;
+    }
     if (error) {
       setMsg(/invalid login/i.test(error.message) ? 'Грешен имейл или парола.'
         : /already registered/i.test(error.message) ? 'Този имейл вече има профил. Влезте с него.'
+        : /not confirmed/i.test(error.message) ? 'Имейлът още не е потвърден. Отворете писмото от Supabase и натиснете връзката.'
         : /network|fetch/i.test(error.message) ? 'Няма връзка с интернет.' : error.message);
     }
   }

@@ -48,6 +48,23 @@ function Root() {
   );
 }
 
+function ErrorScreen() {
+  const t = useTheme(); const s = useStore();
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 14 }}>
+      <Text style={{ color: t.ink, fontSize: 22, fontWeight: '800' }}>Няма връзка с базата данни</Text>
+      <T muted>Проверете интернет връзката и опитайте отново. Ако проблемът остане, изпратете снимка на този екран.</T>
+      <Text selectable style={{ color: t.bad, fontSize: 13 }}>{s.lastError}</Text>
+      <Pressable onPress={() => s.retry()} style={{ backgroundColor: t.accent, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}>
+        <Text style={{ color: t.accentInk, fontWeight: '700' }}>Опитай отново</Text>
+      </Pressable>
+      <Pressable onPress={() => s.signOut()} style={{ paddingVertical: 10, alignItems: 'center' }}>
+        <Text style={{ color: t.accent, fontWeight: '700' }}>Изход от профила</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function Loading() {
   const t = useTheme();
   return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}><ActivityIndicator color={t.accent} /><T muted>Зареждане на бюджета…</T></View>;
@@ -88,6 +105,7 @@ function Main() {
   }), [tab, sub, txFilter, metric]);
 
   if (s.status === 'loading') return <Loading />;
+  if (s.status === 'error') return <ErrorScreen />;
   if (s.status === 'nohousehold') return <HouseholdScreen />;
   const c = currentCycle(s.model);
 

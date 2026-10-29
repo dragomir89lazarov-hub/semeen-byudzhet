@@ -25,6 +25,17 @@ jobs:
           cache: npm
       - if: steps.ready.outputs.ok == '1'
         run: npm ci
+      - name: Database check (Supabase answers and the tables exist)
+        if: steps.ready.outputs.ok == '1'
+        run: |
+          URL=$(node -e "const s=require('fs').readFileSync('src/config.ts','utf8');console.log(s.match(/SUPABASE_URL = '([^']+)'/)[1])")
+          KEY=$(node -e "const s=require('fs').readFileSync('src/config.ts','utf8');console.log(s.match(/SUPABASE_KEY = '([^']+)'/)[1])")
+          for T in households household_members transactions; do
+            OUT=$(curl -sS -m 20 -w " HTTP:%{http_code}" "$URL/rest/v1/$T?select=*&limit=1" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | tr '\n' ' ' | cut -c1-400)
+            echo "::notice title=DB $T::$OUT"
+          done
+          AUTH=$(curl -sS -m 20 -w " HTTP:%{http_code}" "$URL/auth/v1/settings" -H "apikey: $KEY" | tr '\n' ' ' | cut -c1-600)
+          echo "::notice title=Auth settings::$AUTH"
       - name: Type-check
         if: steps.ready.outputs.ok == '1'
         run: npx tsc --noEmit
