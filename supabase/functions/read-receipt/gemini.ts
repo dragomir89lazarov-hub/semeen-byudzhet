@@ -66,16 +66,18 @@ const SCHEMA = {
 
 export async function readReceipt(o: {
   apiKey: string; model?: string | null; image: string; mimeType: string; categories: CategoryHint[]; today: string;
+  only?: boolean; timeoutMs?: number;
 }): Promise<ReadResult> {
   if (!o.apiKey) return { ok: false, error: 'not_configured' };
-  const models = [o.model, ...DEFAULT_MODELS].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+  const models = (o.only && o.model ? [o.model] : [o.model, ...DEFAULT_MODELS]).filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+  const details: string[] = [];
   let lastDetail = '';
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: Response;
       try {
         res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(o.timeoutMs ?? 45_000),
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': o.apiKey },
         body: JSON.stringify({
@@ -84,13 +86,13 @@ export async function readReceipt(o: {
         }),
         });
       } catch (e) {                                                                            // dropped connection or timeout: like "busy"
-        lastDetail = `${model}: ${String((e as Error)?.message || e)}`;
+        lastDetail = `${model}: ${String((e as Error)?.message || e)} ${String(((e as Error & { cause?: unknown })?.cause as Error)?.message || '')}`; details.push(lastDetail);
         if (attempt === 0) await sleep(1500);
         continue;
       }
-      if (res.status === 404) { lastDetail = `${model}: not found`; break; }                  // retired: next model
+      if (res.status === 404) { lastDetail = `${model}: not found`; details.push(lastDetail); break; }                  // retired: next model
       if (res.status === 503 || res.status === 500) {                                          // busy: retry once, then next model
-        lastDetail = `${model} ${res.status}: ${(await res.text()).slice(0, 200)}`;
+        lastDetail = `${model} ${res.status}: ${(await res.text()).slice(0, 160)}`; details.push(lastDetail);
         if (attempt === 0) await sleep(1500);
         continue;
       }
@@ -107,5 +109,5 @@ export async function readReceipt(o: {
       }
     }
   }
-  return { ok: false, error: 'failed', detail: lastDetail || 'no model available' };
+  return { ok: false, error: 'failed', detail: details.join(' || ') || lastDetail || 'no model available' };
 }
