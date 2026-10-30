@@ -1,19 +1,18 @@
 // "Къде отидоха парите": four ways to look at this period's spending by category.
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Svg, { Line, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Line, Path, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import * as Engine from '../engine/budgetEngine';
-import { sortedCycles, spentByStat, statItems, today } from '../data/derive';
+import { computePool, spentByStat, statItems, today } from '../data/derive';
 import type { Cycle, Model } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
-import { periodName } from '../engine/periods';
 import { catColor, useTheme } from '../lib/theme';
 import { Donut } from './charts';
 import { NUM, T } from './kit';
 import { GroupToggle, useNav } from './nav';
 
-type View4 = 'share' | 'line' | 'bubbles' | 'pyramid';
-const LABELS: [View4, string][] = [['share', 'Дялове'], ['line', 'Линии'], ['bubbles', 'Кръгове'], ['pyramid', 'Пирамида']];
+type View4 = 'share' | 'line' | 'bubbles' | 'daily';
+const LABELS: [View4, string][] = [['share', 'Дялове'], ['line', 'Линии'], ['bubbles', 'Кръгове'], ['daily', 'По дни']];
 
 export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
   const t = useTheme(); const nav = useNav();
@@ -54,7 +53,7 @@ export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
             ))}
           </View>
         </View>
-      ) : view === 'line' ? <Lines m={m} c={c} rows={rows} /> : view === 'bubbles' ? <Bubbles rows={rows} total={total} /> : <Pyramid m={m} c={c} rows={rows} />}
+      ) : view === 'line' ? <Lines m={m} c={c} rows={rows} /> : view === 'bubbles' ? <Bubbles rows={rows} total={total} /> : <Daily m={m} c={c} rows={rows} />}
     </View>
   );
 }
@@ -125,37 +124,75 @@ function Bubbles({ rows, total }: { rows: Row[]; total: number }) {
   );
 }
 
-/** Previous period (left) vs this period (right) per category. */
-function Pyramid({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
+/**
+ * One column per day from the start of the period to today, stacked by category (or group).
+ * The dashed line is that day's limit (remaining at midnight ÷ days left), so it can step
+ * up or down from day to day; days above their limit get a red date.
+ */
+function Daily({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
   const t = useTheme();
-  const prev = [...sortedCycles(m)].reverse().find(x => x.end < c.start) || null;
-  const nav = useNav();
-  const prevSpent = prev ? spentByStat(m, prev, nav.grouped) : {};
-  const data = rows.map(r => ({ ...r, p: prevSpent[r.k.id] || 0 })).filter(r => r.v > 0 || r.p > 0);
-  if (!data.length) return <T muted small>Още няма разходи за сравнение.</T>;
-  const max = Math.max(1, ...data.map(r => Math.max(r.v, r.p)));
-  const soFar = Engine.cycleClock({ startDate: c.start, endDate: c.end }, today()).phase === 'active';
+  const td = today();
+  const totalDays = Engine.daysInclusive(c.start, c.end);
+  const n = Math.max(0, Math.min(totalDays, Engine.daysInclusive(c.start, td < c.end ? td : c.end)));
+  if (!n) return <T muted small>Периодът още не е започнал.</T>;
+  const dayList = Array.from({ length: n }, (_, i) => Engine.addDays(c.start, i));
+  const owner = new Map<string, number>();                       // category id → row index
+  rows.forEach((r, i) => r.ids.forEach(id => owner.set(id, i)));
+  const perDay = dayList.map(d => {
+    const v = rows.map(() => 0);
+    for (const x of m.txs) if (x.kind === 'expense' && !x.bucketId && x.occurredOn === d && x.categoryId) {
+      const i = owner.get(x.categoryId); if (i !== undefined) v[i] += x.amountCents;
+    }
+    return v;
+  });
+  const totals = perDay.map(v => v.reduce((a, b) => a + b, 0));
+  const limits = dayList.map(d => computePool(m, c, d).dailyAllowanceCents);
+  const over = totals.map((v, i) => v > limits[i]);
+  const maxY = Math.max(1, ...totals, ...limits) * 1.12;
+  const W = 340, H = 196, L = 34, R = 6, T0 = 10, B = n <= 10 ? 30 : 18;
+  const slot = (W - L - R) / n, gap = n <= 10 ? 6 : n <= 20 ? 3 : 1.5, bw = Math.max(2, slot - gap);
+  const X = (i: number) => L + i * slot + gap / 2;
+  const Y = (v: number) => T0 + (1 - v / maxY) * (H - T0 - B);
+  const every = n <= 10 ? 1 : n <= 20 ? 2 : 5;
+  const WD = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  const limitPath = limits.map((v, i) => `${i ? 'L' : 'M'}${(L + i * slot).toFixed(1)} ${Y(v).toFixed(1)} H${(L + (i + 1) * slot).toFixed(1)}`).join(' ');
+  const avg = Math.round(totals.reduce((a, b) => a + b, 0) / n);
+  const curLimit = limits[n - 1];
   return (
-    <View style={{ gap: 6 }}>
-      <View style={{ flexDirection: 'row' }}>
-        <Text style={{ flex: 1, textAlign: 'right', color: t.ink2, fontSize: 12, fontWeight: '700' }}>{prev ? periodName(prev.start, prev.end) : 'Няма предходен'}</Text>
-        <View style={{ width: 96 }} />
-        <Text style={{ flex: 1, color: t.ink, fontSize: 12, fontWeight: '700' }}>{periodName(c.start, c.end)}{soFar ? ' (досега)' : ''}</Text>
+    <View style={{ gap: 8 }}>
+      <View style={{ aspectRatio: W / H, width: '100%' }}>
+        <Svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`}>
+          {dayList.map((d, i) => {
+            let y = Y(0);
+            return (
+              <G key={d}>
+                {perDay[i].map((v, k) => {
+                  if (!v) return null;
+                  const h = Y(0) - Y(v); y -= h;
+                  return <Rect key={k} x={X(i)} y={y} width={bw} height={h} fill={rows[k].color} />;
+                })}
+                {i % every === 0 || i === n - 1 ? (
+                  <SvgText x={X(i) + bw / 2} y={H - (n <= 10 ? 16 : 4)} textAnchor="middle" fontSize={10} fontWeight={over[i] ? '700' : '400'} fill={over[i] ? t.bad : t.ink2}>{String(Number(d.slice(8)))}</SvgText>
+                ) : null}
+                {n <= 10 ? <SvgText x={X(i) + bw / 2} y={H - 4} textAnchor="middle" fontSize={9} fill={t.ink2}>{WD[new Date(Engine.toDayNumber(d) * 864e5).getUTCDay()]}</SvgText> : null}
+              </G>
+            );
+          })}
+          <Line x1={L} x2={W - R} y1={Y(0)} y2={Y(0)} stroke={t.line} />
+          <Path d={limitPath} stroke={t.ink} strokeWidth={1.3} strokeDasharray="4 3" fill="none" />
+          <SvgText x={0} y={Y(curLimit) + 3} fontSize={10} fontWeight="700" fill={t.ink}>{eur0(curLimit)}</SvgText>
+          <SvgText x={0} y={Y(0) + 3} fontSize={10} fill={t.ink2}>0</SvgText>
+        </Svg>
       </View>
-      {data.map(r => (
-        <View key={r.k.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ flex: 1, alignItems: 'flex-end', gap: 2 }}>
-            <View style={{ height: 14, width: `${(r.p / max) * 100}%`, backgroundColor: r.color, opacity: 0.45, borderTopLeftRadius: 4, borderBottomLeftRadius: 4 }} />
-            <Text style={[{ color: t.ink2, fontSize: 11 }, NUM]}>{eur0(r.p)}</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, columnGap: 10 }}>
+        {rows.filter((_, k) => perDay.some(v => v[k] > 0)).map(r => (
+          <View key={r.k.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: r.color }} />
+            <Text style={{ color: t.ink, fontSize: 12 }}>{r.k.name}</Text>
           </View>
-          <Text numberOfLines={2} style={{ width: 96, textAlign: 'center', color: t.ink, fontSize: 11.5, paddingHorizontal: 4 }}>{r.k.name}</Text>
-          <View style={{ flex: 1, alignItems: 'flex-start', gap: 2 }}>
-            <View style={{ height: 14, width: `${(r.v / max) * 100}%`, backgroundColor: r.color, borderTopRightRadius: 4, borderBottomRightRadius: 4 }} />
-            <Text style={[{ color: r.v > r.p && r.p > 0 ? t.bad : t.ink, fontSize: 11, fontWeight: '600' }, NUM]}>{eur0(r.v)}</Text>
-          </View>
-        </View>
-      ))}
+        ))}
+      </View>
+      <T muted small>Пунктирът е дневният лимит за всеки ден. Над лимита: {over.filter(Boolean).length} от {n} {n === 1 ? 'ден' : 'дни'} · средно {eur0(avg)} на ден</T>
     </View>
   );
 }
-
