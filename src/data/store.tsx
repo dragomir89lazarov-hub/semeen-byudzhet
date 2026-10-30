@@ -82,11 +82,16 @@ interface Store {
   addBucket(name: string, targetCents: number | null): Promise<void>;
   updateBucket(id: string, patch: { name?: string; targetCents?: number | null; archived?: boolean }): Promise<void>;
   resetAll(): Promise<boolean>;
+  createBackup(): Promise<boolean>;
+  listBackups(): Promise<BackupInfo[] | null>;
+  restoreBackup(id: string): Promise<boolean>;
   updateSettings(patch: { people?: string[]; bufferCents?: number; payday?: PaydayRule; defaultFund?: string }): Promise<void>;
   saveCycle(c: { id?: string; start: string; end: string; carryoverCents?: number }): Promise<string>;
   saveBudgets(cycleId: string, budgets: Record<string, number>): Promise<void>;
   signOut(): Promise<void>;
 }
+export interface BackupInfo { id: string; created_at: string; kind: 'manual' | 'auto' | 'before_reset' | 'before_restore'; summary: { transactions?: number; categories?: number; buckets?: number; cycles?: number } }
+
 const Ctx = createContext<Store | null>(null);
 export const useStore = () => { const s = useContext(Ctx); if (!s) throw new Error('StoreProvider missing'); return s; };
 
@@ -168,6 +173,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
       if (cached) { const c = JSON.parse(cached); setHousehold(c.household); setTables({ ...EMPTY, ...c.tables }); setStatus('ready'); }
     } catch { }
     try { await loadFromServer(h); setStatus('ready'); } catch (e) { if (!isNetworkError(e)) setLastError(humanError((e as Error).message)); }
+    supabase.rpc('ensure_daily_backup').then(() => { }, () => { });   // one automatic copy per day, whoever opens the app first
     setStatus(s => (s === 'loading' ? 'ready' : s));
   }, [userId, loadFromServer]);
 
@@ -327,7 +333,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
     },
     async resetAll() {
       const h = hidRef.current; if (!h) return false;
-      const { error } = await supabase.rpc('reset_household');
+      const { error } = await supabase.rpc('reset_household_with_backup');
       if (error) { setLastError(humanError(error.message)); return false; }
       outbox.current = []; await saveOutbox();
       setTables(EMPTY);
@@ -337,6 +343,28 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
       const c = cycleAroundToday(rule as PaydayRule);
       const { error: e2 } = await supabase.from('pay_cycles').insert({ household_id: h, start_date: c.start, end_date: c.end });
       if (e2) setLastError(humanError(e2.message));
+      await loadFromServer(h);
+      return true;
+    },
+    async createBackup() {
+      const { error } = await supabase.rpc('create_backup', { p_kind: 'manual' });
+      if (error) { setLastError(humanError(error.message)); return false; }
+      return true;
+    },
+    async listBackups() {
+      const h = hidRef.current; if (!h) return null;
+      const { data, error } = await supabase.from('backups').select('id, created_at, kind, summary').eq('household_id', h).order('created_at', { ascending: false }).limit(40);
+      if (error) return null;
+      return data as BackupInfo[];
+    },
+    async restoreBackup(id) {
+      const h = hidRef.current; if (!h) return false;
+      await flush();
+      const { error } = await supabase.rpc('restore_backup', { p_id: id });
+      if (error) { setLastError(humanError(error.message)); return false; }
+      outbox.current = []; await saveOutbox();
+      setTables(EMPTY);
+      try { await AsyncStorage.removeItem(`cache:${h}`); } catch { }
       await loadFromServer(h);
       return true;
     },

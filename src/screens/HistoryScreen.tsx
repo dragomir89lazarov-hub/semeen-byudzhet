@@ -3,29 +3,29 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { periodName } from '../engine/periods';
+import * as Engine from '../engine/budgetEngine';
+import SpendingViews from '../ui/SpendingViews';
 import { catOf, computePool, currentCycle, sortedCycles, today, txSort } from '../data/derive';
 import { useStore } from '../data/store';
 import type { Cycle, Model, Tx } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
-import { Btn, Card, Chip, Chips, Field, H2, Label, NUM, Row, Screen, T } from '../ui/kit';
+import { Btn, Card, Field, H2, Label, NUM, Row, Screen, T } from '../ui/kit';
 import { GroupToggle, TxRow, useNav } from '../ui/nav';
 
-type Preset = 'current' | 'previous' | 'last3' | 'year' | 'all' | 'custom';
-const PRESETS: [Preset, string][] = [['current', 'Текущ период'], ['previous', 'Предишен'], ['last3', 'Последните 3'], ['year', 'Тази година'], ['all', 'Всичко']];
+type Preset = 'current' | 'previous' | 'week' | 'custom';
+const PRESETS: [Exclude<Preset, 'custom'>, string][] = [['current', 'Текущ период'], ['previous', 'Предишен период'], ['week', 'Календарна седмица']];
 
 function rangeFor(p: Preset, m: Model): { from: string; to: string } {
   const td = today(); const cs = sortedCycles(m); const cur = currentCycle(m);
   const i = cur ? cs.findIndex(c => c.id === cur.id) : -1;
   if (p === 'current' && cur) return { from: cur.start, to: cur.end };
   if (p === 'previous' && i > 0) return { from: cs[i - 1].start, to: cs[i - 1].end };
-  if (p === 'last3' && i >= 0) return { from: cs[Math.max(0, i - 2)].start, to: cs[i].end };
-  if (p === 'year') return { from: `${td.slice(0, 4)}-01-01`, to: `${td.slice(0, 4)}-12-31` };
-  if (p === 'all') {
-    const first = [cs[0]?.start, ...m.txs.map(t => t.occurredOn)].filter(Boolean).sort()[0] || td;
-    const last = [cs[cs.length - 1]?.end, td].filter(Boolean).sort().reverse()[0] as string;
-    return { from: first, to: last };
+  if (p === 'week') {                                     // Monday – Sunday of this week
+    const wd = new Date(Engine.toDayNumber(td) * 864e5).getUTCDay();
+    const mon = Engine.addDays(td, wd === 0 ? -6 : 1 - wd);
+    return { from: mon, to: Engine.addDays(mon, 6) };
   }
   return cur ? { from: cur.start, to: cur.end } : { from: td, to: td };
 }
@@ -52,6 +52,7 @@ export default function HistoryScreen() {
   const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [shown, setShown] = useState(30);
+  const [menu, setMenu] = useState(false);
   const nav = useNav();
   const range = preset === 'custom' && custom ? custom : rangeFor(preset, m);
   const { from, to } = range;
@@ -65,18 +66,34 @@ export default function HistoryScreen() {
   const saved = txs.reduce((a, x) => a + (x.kind === 'bucket_deposit' ? x.amountCents : x.kind === 'bucket_withdrawal' ? -x.amountCents : 0), 0);
   const cats = byCategory(m, txs, nav.grouped);
   const cycles = sortedCycles(m).filter(c => c.start <= to && c.end >= from).reverse();
+  const exactCycle = cycles.find(c => c.start === from && c.end === to) || null;   // plans are shown only for a whole period
   const setRange = (r: { from: string; to: string }) => { setPreset('custom'); setCustom(r.from <= r.to ? r : { from: r.to, to: r.from }); };
 
   return (
     <Screen>
       <Card style={{ gap: 12 }}>
-        <Chips>
-          {PRESETS.map(([k, l]) => <Chip key={k} label={l} selected={preset === k} onPress={() => { setPreset(k); setOpen(null); }} />)}
-          <Chip label="Избрани дати" selected={preset === 'custom'} onPress={() => setRange(range)} />
-        </Chips>
+        <View style={{ gap: 6 }}>
+          <Pressable onPress={() => setMenu(!menu)} accessibilityRole="button"
+            style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: menu ? t.accent : t.line, backgroundColor: t.bg, borderRadius: 12, paddingVertical: 11, paddingHorizontal: 12 }}>
+            <Text style={{ color: t.ink2, fontSize: 13 }}>Период: </Text>
+            <Text style={{ flex: 1, color: t.ink, fontWeight: '700', fontSize: 15 }}>{preset === 'custom' ? 'Избрани дати' : PRESETS.find(x => x[0] === preset)?.[1]}</Text>
+            <Text style={{ color: t.ink2, fontSize: 13 }}>{menu ? '▲' : '▼'}</Text>
+          </Pressable>
+          {menu ? (
+            <View style={{ borderWidth: 1, borderColor: t.line, borderRadius: 12, overflow: 'hidden' }}>
+              {PRESETS.map(([k, l], i) => (
+                <Pressable key={k} onPress={() => { setPreset(k); setOpen(null); setMenu(false); }}
+                  style={{ paddingVertical: 12, paddingHorizontal: 12, borderTopWidth: i ? 1 : 0, borderTopColor: t.line, backgroundColor: preset === k ? t.accentSoft : t.surface }}>
+                  <Text style={{ color: t.ink, fontWeight: preset === k ? '700' : '400' }}>{l}</Text>
+                  <Text style={[{ color: t.ink2, fontSize: 12 }, NUM]}>{(() => { const r = rangeFor(k, m); return `${dLabel(r.from)} – ${dLabel(r.to)}`; })()}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Field label="От"><DateButton value={from} onChange={v => setRange({ from: v, to })} /></Field>
-          <Field label="До"><DateButton value={to} onChange={v => setRange({ from, to: v })} /></Field>
+          <Field label="От"><DateButton value={from} onChange={v => { setMenu(false); setRange({ from: v, to }); }} /></Field>
+          <Field label="До"><DateButton value={to} onChange={v => { setMenu(false); setRange({ from, to: v }); }} /></Field>
         </View>
       </Card>
 
@@ -85,6 +102,11 @@ export default function HistoryScreen() {
         <Text adjustsFontSizeToFit numberOfLines={1} style={[{ color: t.ink, fontSize: 44, fontWeight: '800', letterSpacing: -1.2 }, NUM]}>{eur0(spentAll)}</Text>
         <T muted small>{dLabel(from)} – {dLabel(to)} · от общия бюджет {eur0(spentAll - spentFunds)} · от фондове {eur0(spentFunds)}</T>
         <T muted small>Приходи {eur0(income)} · внесено във фондове {eur0(saved)}</T>
+      </Card>
+
+      <Card>
+        <Row><H2>Къде отидоха парите</H2><T muted small>{name}</T></Row>
+        <SpendingViews m={m} from={from} to={to} cycle={exactCycle} />
       </Card>
 
       <Card style={{ gap: 0 }}>

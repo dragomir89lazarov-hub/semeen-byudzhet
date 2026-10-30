@@ -1,9 +1,11 @@
-// "Къде отидоха парите": four ways to look at this period's spending by category.
+// "Къде отидоха парите": four ways to look at spending by category over a date range
+// (the current pay period on Today, any filter in History). Only spending from the salaries
+// fund counts: payments from savings funds don't touch the daily limit.
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { G, Line, Path, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import * as Engine from '../engine/budgetEngine';
-import { computePool, spentByStat, statItems, today } from '../data/derive';
+import { computePool, statItems, statKeyOf, today } from '../data/derive';
 import type { Cycle, Model } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
@@ -14,15 +16,24 @@ import { GroupToggle, useNav } from './nav';
 type View4 = 'share' | 'line' | 'bubbles' | 'daily';
 const LABELS: [View4, string][] = [['share', 'Дялове'], ['line', 'Линии'], ['bubbles', 'Кръгове'], ['daily', 'По дни']];
 
-export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
+export type Span = { start: string; end: string };
+
+export default function SpendingViews({ m, from, to, cycle, onCategory }: {
+  m: Model; from: string; to: string; cycle?: Cycle | null; onCategory?: (categoryId: string) => void;
+}) {
   const t = useTheme(); const nav = useNav();
   const [view, setView] = useState<View4>('share');
+  const span: Span = { start: from, end: to };
   const items = statItems(m, nav.grouped);
-  const spent = spentByStat(m, c, nav.grouped);
+  const spent: Record<string, number> = {};
+  for (const x of m.txs) if (x.kind === 'expense' && !x.bucketId && x.occurredOn >= from && x.occurredOn <= to) {
+    const k = statKeyOf(m, x.categoryId, nav.grouped); spent[k] = (spent[k] || 0) + x.amountCents;
+  }
+  const budgets = cycle?.budgets || {};
   // archived categories only show up when they have spending in this period
   const rows = items
     .filter(it => (spent[it.key] || 0) > 0 || it.ids.some(id => !m.categories.find(k => k.id === id)?.archived))
-    .map(it => ({ k: { id: it.key, name: it.name }, ids: it.ids, v: spent[it.key] || 0, plan: it.ids.reduce((a, id) => a + (c.budgets[id] || 0), 0), color: catColor(t, it.color), isGroup: it.isGroup }));
+    .map(it => ({ k: { id: it.key, name: it.name }, ids: it.ids, v: spent[it.key] || 0, plan: it.ids.reduce((a, id) => a + (budgets[id] || 0), 0), color: catColor(t, it.color), isGroup: it.isGroup }));
   const total = rows.reduce((a, r) => a + r.v, 0);
 
   return (
@@ -42,7 +53,7 @@ export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
           <Donut t={t} total={total} parts={rows.map(r => ({ color: r.color, value: r.v }))} />
           <View style={{ flex: 1, gap: 8 }}>
             {rows.map(({ k, v, plan, color, isGroup }) => (
-              <Pressable key={k.id} onPress={() => { if (!k.id.startsWith('g:')) { nav.setTxFilter(k.id); nav.setSub('txs'); } }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Pressable key={k.id} onPress={() => { if (onCategory && !k.id.startsWith('g:')) onCategory(k.id); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color }} />
                 <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 13.5, fontWeight: isGroup ? '700' : '400' }}>{k.name}</Text>
                 <View style={{ alignItems: 'flex-end' }}>
@@ -53,7 +64,7 @@ export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
             ))}
           </View>
         </View>
-      ) : view === 'line' ? <Lines m={m} c={c} rows={rows} /> : view === 'bubbles' ? <Bubbles rows={rows} total={total} /> : <Daily m={m} c={c} rows={rows} />}
+      ) : view === 'line' ? <Lines m={m} span={span} rows={rows} /> : view === 'bubbles' ? <Bubbles rows={rows} total={total} /> : <Daily m={m} span={span} rows={rows} />}
     </View>
   );
 }
@@ -61,10 +72,10 @@ export default function SpendingViews({ m, c }: { m: Model; c: Cycle }) {
 type Row = { k: { id: string; name: string }; ids: string[]; v: number; color: string };
 
 /** Cumulative spending per category, day by day through today. */
-function Lines({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
+function Lines({ m, span: c, rows }: { m: Model; span: Span; rows: Row[] }) {
   const t = useTheme();
   const totalDays = Engine.daysInclusive(c.start, c.end);
-  const lastDay = Math.min(Engine.daysInclusive(c.start, today()), totalDays);
+  const lastDay = Math.max(0, Math.min(Engine.daysInclusive(c.start, today()), totalDays));
   const shown = rows.filter(r => r.v > 0);
   const W = 340, H = 180, L = 8, R = 8, T0 = 14, B = 24;
   const series = shown.map(r => {
@@ -129,12 +140,12 @@ function Bubbles({ rows, total }: { rows: Row[]; total: number }) {
  * The dashed line is that day's limit (remaining at midnight ÷ days left), so it can step
  * up or down from day to day; days above their limit get a red date.
  */
-function Daily({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
+function Daily({ m, span: c, rows }: { m: Model; span: Span; rows: Row[] }) {
   const t = useTheme();
   const td = today();
   const totalDays = Engine.daysInclusive(c.start, c.end);
   const n = Math.max(0, Math.min(totalDays, Engine.daysInclusive(c.start, td < c.end ? td : c.end)));
-  if (!n) return <T muted small>Периодът още не е започнал.</T>;
+  if (!n) return <T muted small>Избраните дати са в бъдещето.</T>;
   const dayList = Array.from({ length: n }, (_, i) => Engine.addDays(c.start, i));
   const owner = new Map<string, number>();                       // category id → row index
   rows.forEach((r, i) => r.ids.forEach(id => owner.set(id, i)));
@@ -146,18 +157,19 @@ function Daily({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
     return v;
   });
   const totals = perDay.map(v => v.reduce((a, b) => a + b, 0));
-  const limits = dayList.map(d => computePool(m, c, d).dailyAllowanceCents);
-  const over = totals.map((v, i) => v > limits[i]);
-  const maxY = Math.max(1, ...totals, ...limits) * 1.12;
+  // each day's limit comes from the pay period that day belongs to (none if it's outside every period)
+  const limits = dayList.map(d => { const cy = m.cycles.find(x => x.start <= d && d <= x.end); return cy ? computePool(m, cy, d).dailyAllowanceCents : null; });
+  const over = totals.map((v, i) => limits[i] !== null && v > (limits[i] as number));
+  const maxY = Math.max(1, ...totals, ...limits.map(v => v || 0)) * 1.12;
   const W = 340, H = 196, L = 34, R = 6, T0 = 10, B = n <= 10 ? 30 : 18;
   const slot = (W - L - R) / n, gap = n <= 10 ? 6 : n <= 20 ? 3 : 1.5, bw = Math.max(2, slot - gap);
   const X = (i: number) => L + i * slot + gap / 2;
   const Y = (v: number) => T0 + (1 - v / maxY) * (H - T0 - B);
   const every = n <= 10 ? 1 : n <= 20 ? 2 : 5;
   const WD = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
-  const limitPath = limits.map((v, i) => `${i ? 'L' : 'M'}${(L + i * slot).toFixed(1)} ${Y(v).toFixed(1)} H${(L + (i + 1) * slot).toFixed(1)}`).join(' ');
+  const limitPath = limits.map((v, i) => v === null ? '' : `${i && limits[i - 1] !== null ? 'L' : 'M'}${(L + i * slot).toFixed(1)} ${Y(v).toFixed(1)} H${(L + (i + 1) * slot).toFixed(1)}`).join(' ');
   const avg = Math.round(totals.reduce((a, b) => a + b, 0) / n);
-  const curLimit = limits[n - 1];
+  const curLimit = [...limits].reverse().find(v => v !== null) ?? null;
   return (
     <View style={{ gap: 8 }}>
       <View style={{ aspectRatio: W / H, width: '100%' }}>
@@ -179,8 +191,8 @@ function Daily({ m, c, rows }: { m: Model; c: Cycle; rows: Row[] }) {
             );
           })}
           <Line x1={L} x2={W - R} y1={Y(0)} y2={Y(0)} stroke={t.line} />
-          <Path d={limitPath} stroke={t.ink} strokeWidth={1.3} strokeDasharray="4 3" fill="none" />
-          <SvgText x={0} y={Y(curLimit) + 3} fontSize={10} fontWeight="700" fill={t.ink}>{eur0(curLimit)}</SvgText>
+          {limitPath.trim() ? <Path d={limitPath} stroke={t.ink} strokeWidth={1.3} strokeDasharray="4 3" fill="none" /> : null}
+          {curLimit !== null ? <SvgText x={0} y={Y(curLimit) + 3} fontSize={10} fontWeight="700" fill={t.ink}>{eur0(curLimit)}</SvgText> : null}
           <SvgText x={0} y={Y(0) + 3} fontSize={10} fill={t.ink2}>0</SvgText>
         </Svg>
       </View>

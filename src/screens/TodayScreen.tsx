@@ -130,7 +130,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
 
       <Card>
         <Row><H2>Къде отидоха парите</H2><T muted small>{periodName(c.start, c.end)}</T></Row>
-        <SpendingViews m={m} c={c} />
+        <SpendingViews m={m} from={c.start} to={c.end} cycle={c} onCategory={id => { nav.setTxFilter(id); nav.setSub('txs'); }} />
       </Card>
 
       <Card>

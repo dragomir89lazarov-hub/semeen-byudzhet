@@ -8,6 +8,7 @@ import { dLabel, dwLabel, eur } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
 import CategoryManager from './CategoryManager';
+import BackupsCard from './BackupsCard';
 import { Btn, Card, Check, Chip, Field, H2, Input, Screen, T, useToast } from '../ui/kit';
 
 const centsText = (c: number | undefined) => (c ? (c / 100).toFixed(2).replace('.', ',') : '');
@@ -178,9 +179,11 @@ export default function SetupScreen() {
         <Btn variant="danger" title="Изход от профила" onPress={() => s.signOut()} style={{ alignSelf: 'flex-start' }} />
       </Card>
 
+      <BackupsCard />
+
       <Card style={{ borderWidth: 1, borderColor: t.bad }}>
         <H2>Изчисти всички данни</H2>
-        <T muted small>За тестове. Изтрива всички разходи, приходи, вноски и тегления, периоди, планове, ваши категории и фондове, и връща началните категории и фондове с нов текущ период. Профилите ви и връзката между двата телефона остават. Действието не може да бъде отменено.</T>
+        <T muted small>За тестове. Изтрива всички разходи, приходи, вноски и тегления, периоди, планове, ваши категории и фондове, и връща началните категории и фондове с нов текущ период. Профилите ви и връзката между двата телефона остават. Преди изчистването автоматично се прави резервно копие, от което можете да възстановите всичко.</T>
         <Field label="Напишете ИЗТРИЙ, за да потвърдите"><Input value={resetText} onChangeText={setResetText} autoCapitalize="characters" placeholder="ИЗТРИЙ" /></Field>
         <Btn variant="dangerSolid" title={resetting ? 'Изчистване…' : 'Изтрий всичко'} disabled={resetText.trim().toUpperCase() !== 'ИЗТРИЙ' || resetting} onPress={async () => {
           setResetting(true);
