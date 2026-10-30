@@ -190,7 +190,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
                     {bks.map(b => <Chip key={b.id} label={b.name} selected={source === b.id} onPress={() => setSource(b.id)} />)}
                   </Chips>
                 </Field>
-                <Field label="Плати"><Chips>{people.map(p => <Chip key={p} label={p} selected={paidBy === p} onPress={() => setPaidBy(p)} />)}</Chips></Field>
+                <Field label="Платил"><Chips>{people.map(p => <Chip key={p} label={p} selected={paidBy === p} onPress={() => setPaidBy(p)} />)}</Chips></Field>
               </>
             ) : mode === 'income' ? (
               <>

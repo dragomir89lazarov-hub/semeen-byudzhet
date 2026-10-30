@@ -37,7 +37,7 @@ export function Label({ children, style }: { children: React.ReactNode; style?: 
   return <Text style={[{ color: t.ink2, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }, style]}>{children}</Text>;
 }
 export const Row = ({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) =>
-  <View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, style]}>{children}</View>;
+  <View style={[{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 12, rowGap: 6 }, style]}>{children}</View>;
 
 export function Btn({ title, onPress, variant = 'default', disabled, block, style }: {
   title: string; onPress?: () => void; variant?: 'primary' | 'default' | 'danger' | 'dangerSolid' | 'link' | 'accentOutline';
@@ -69,7 +69,7 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
   );
 }
 export function Chips({ children }: { children: React.ReactNode }) {
-  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled">{children}</ScrollView>;
+  return <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{children}</View>;
 }
 
 export function Pill({ status, text }: { status: 'on_track' | 'tight' | 'overspending' | 'overdrawn'; text: string }) {
@@ -129,5 +129,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         </View>
       ) : null}
     </ToastCtx.Provider>
+  );
+}
+
+/** Pick one of the palette colours (stored as an index). */
+export function ColorPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
+  const t = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+      {t.cats.map((c, i) => (
+        <Pressable key={i} onPress={() => onChange(i)} accessibilityLabel={`Цвят ${i + 1}`} accessibilityState={{ selected: value === i }}
+          style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c, alignItems: 'center', justifyContent: 'center',
+            borderWidth: value === i ? 3 : 0, borderColor: t.ink }}>
+          {value === i ? <Text style={{ color: '#fff', fontWeight: '900' }}>✓</Text> : null}
+        </Pressable>
+      ))}
+    </View>
   );
 }

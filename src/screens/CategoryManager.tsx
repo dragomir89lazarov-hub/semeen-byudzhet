@@ -7,7 +7,7 @@ import { activeCats, groupNames } from '../data/derive';
 import { useStore } from '../data/store';
 import type { Category } from '../data/types';
 import { catColor, useTheme } from '../lib/theme';
-import { Btn, Chip, H2, Input, T, useToast } from '../ui/kit';
+import { Btn, Chip, ColorPicker, H2, Input, T, useToast } from '../ui/kit';
 
 export default function CategoryManager() {
   const t = useTheme(); const toast = useToast();
@@ -17,18 +17,19 @@ export default function CategoryManager() {
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [group, setGroup] = useState<string | null>(null);
+  const [color, setColor] = useState(0);
   const [newGroup, setNewGroup] = useState<string | null>(null); // text while creating a group
   const [arm, setArm] = useState(false);
   const [editGroup, setEditGroup] = useState<string | null>(null);
   const [groupText, setGroupText] = useState('');
 
-  const open = (k: Category) => { setEditId(k.id); setName(k.name); setGroup(k.group); setNewGroup(null); setArm(false); setEditGroup(null); };
+  const open = (k: Category) => { setEditId(k.id); setName(k.name); setGroup(k.group); setColor(k.color); setNewGroup(null); setArm(false); setEditGroup(null); };
 
   async function save(k: Category) {
     const n = name.trim(); if (!n) return toast('Въведете име.');
     if (m.categories.some(x => x.id !== k.id && x.name.toLowerCase() === n.toLowerCase())) return toast('Вече има категория с това име.');
     const g = newGroup !== null ? newGroup.trim() || null : group;
-    await s.updateCategory(k.id, { name: n, group: g });
+    await s.updateCategory(k.id, { name: n, group: g, color });
     setEditId(null); toast('Записано');
   }
 
@@ -42,6 +43,8 @@ export default function CategoryManager() {
         <Chip label="+ Нова група" selected={newGroup !== null} onPress={() => setNewGroup('')} />
       </View>
       {newGroup !== null ? <Input value={newGroup} onChangeText={setNewGroup} placeholder="Напр. Храна, Дом, Деца" autoFocus /> : null}
+      <Text style={{ color: t.ink2, fontSize: 13, fontWeight: '600' }}>Цвят</Text>
+      <ColorPicker value={color} onChange={setColor} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Btn variant="primary" title="Запази" onPress={() => save(k)} />
         <Btn title="Отказ" onPress={() => setEditId(null)} />
@@ -63,7 +66,7 @@ export default function CategoryManager() {
   return (
     <View style={{ gap: 6 }}>
       <H2>Категории и групи</H2>
-      <T muted small>Докоснете категория, за да я преименувате, да ѝ изберете група (напр. „Храна“ за „Хранителни продукти“ и „Храна за вкъщи“) или да я изтриете. В статистиките превключвателят „Подробно / Групи“ показва категориите поотделно или обединени по групи.</T>
+      <T muted small>Докоснете категория, за да я преименувате, да ѝ смените цвета, да ѝ изберете група (напр. „Храна“ за „Хранителни продукти“ и „Храна за вкъщи“) или да я изтриете. В статистиките превключвателят „Подробно / Групи“ показва категориите поотделно или обединени по групи.</T>
       {groups.map(g => (
         <View key={g} style={{ gap: 2, paddingTop: 6 }}>
           {editGroup === g ? (

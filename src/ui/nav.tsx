@@ -21,7 +21,7 @@ export const NavCtx = createContext<Nav | null>(null);
 export const useNav = () => { const n = useContext(NavCtx); if (!n) throw new Error('NavCtx missing'); return n; };
 
 export function txMeta(m: Model, t: Tx, colors: string[]) {
-  const c = (i: number | undefined) => colors[(((i ?? 0) % 8) + 8) % 8];
+  const c = (i: number | undefined) => { const n = colors.length; return colors[(((i ?? 0) % n) + n) % n]; };
   if (t.kind === 'income') return { title: 'Приход' + (t.paidBy ? ' · ' + t.paidBy : ''), color: '', mark: '+', sign: '+', income: true, from: '' };
   if (t.kind === 'bucket_deposit') { const b = bucketOf(m, t.bucketId); return { title: 'Към ' + (b?.name || 'сметка'), color: c(b?.color), mark: '→', sign: '', income: false, from: '' }; }
   if (t.kind === 'bucket_withdrawal') { const b = bucketOf(m, t.bucketId); return { title: 'От ' + (b?.name || 'сметка'), color: c(b?.color), mark: '←', sign: '+', income: true, from: '' }; }

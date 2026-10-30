@@ -148,7 +148,7 @@ export default function ReceiptReview({ receipt, onClose }: { receipt: Receipt |
                 {bks.map(b => <Chip key={b.id} label={b.name} selected={source === b.id} onPress={() => setSource(b.id)} />)}
               </Chips>
             </Field>
-            <Field label="Плати"><Chips>{people.map(p => <Chip key={p} label={p} selected={paidBy === p} onPress={() => setPaidBy(p)} />)}</Chips></Field>
+            <Field label="Платил"><Chips>{people.map(p => <Chip key={p} label={p} selected={paidBy === p} onPress={() => setPaidBy(p)} />)}</Chips></Field>
             <Check label="Обедини по категории (един разход на категория)" value={group} onChange={setGroup} />
 
             {error ? <T small style={{ color: t.bad }}>{error}</T> : null}

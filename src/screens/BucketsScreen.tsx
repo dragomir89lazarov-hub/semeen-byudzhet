@@ -6,7 +6,7 @@ import { useStore } from '../data/store';
 import { dLabel, eur, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import { Ring, WalletIcon } from '../ui/charts';
-import { Btn, Card, Field, H2, Input, Label, NUM, Screen, T, useToast } from '../ui/kit';
+import { Btn, Card, ColorPicker, Field, H2, Input, Label, NUM, Screen, T, useToast } from '../ui/kit';
 import * as Engine from '../engine/budgetEngine';
 import { TxRow, useNav } from '../ui/nav';
 
@@ -124,12 +124,13 @@ function EditFund({ b, isPool, balance, onDone }: { b: Bucket; isPool?: boolean;
   const [target, setTarget] = useState(b.targetCents ? (b.targetCents / 100).toFixed(2).replace('.', ',') : '');
   const [arm, setArm] = useState(false);
   const [err, setErr] = useState('');
+  const [color, setColor] = useState(b.color);
   async function save() {
     const n = name.trim(); if (!n) return setErr('Въведете име.');
     if (m.buckets.some(x => x.id !== b.id && !x.archived && x.name.toLowerCase() === n.toLowerCase())) return setErr('Вече има сметка с това име.');
     const tc = target.trim() ? Engine.parseAmountToCents(target) : null;
     if (target.trim() && !tc) return setErr('Проверете сумата за целта.');
-    await s.updateBucket(b.id, isPool ? { name: n } : { name: n, targetCents: tc });
+    await s.updateBucket(b.id, isPool ? { name: n, color } : { name: n, targetCents: tc, color });
     toast('Промените са записани'); onDone();
   }
   async function remove() {
@@ -145,6 +146,7 @@ function EditFund({ b, isPool, balance, onDone }: { b: Bucket; isPool?: boolean;
     <View style={{ gap: 8, backgroundColor: t.accentSoft, borderRadius: 12, padding: 12 }}>
       <Field label="Име"><Input value={name} onChangeText={setName} /></Field>
       {!isPool ? <Field label="Цел в € (по избор)"><Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="Без цел" /></Field> : null}
+      <Field label="Цвят"><ColorPicker value={color} onChange={setColor} /></Field>
       {err ? <T small style={{ color: t.bad }}>{err}</T> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Btn variant="primary" title="Запази" onPress={save} />

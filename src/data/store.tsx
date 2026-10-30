@@ -77,10 +77,10 @@ interface Store {
   deleteTx(id: string): Promise<void>;
   addCategory(name: string, fixed: boolean): Promise<string>;
   setCategoryFixed(id: string, fixed: boolean): Promise<void>;
-  updateCategory(id: string, patch: { name?: string; archived?: boolean; group?: string | null }): Promise<void>;
+  updateCategory(id: string, patch: { name?: string; archived?: boolean; group?: string | null; color?: number }): Promise<void>;
   renameGroup(from: string, to: string | null): Promise<void>;
   addBucket(name: string, targetCents: number | null): Promise<void>;
-  updateBucket(id: string, patch: { name?: string; targetCents?: number | null; archived?: boolean }): Promise<void>;
+  updateBucket(id: string, patch: { name?: string; targetCents?: number | null; archived?: boolean; color?: number }): Promise<void>;
   resetAll(): Promise<boolean>;
   createBackup(): Promise<boolean>;
   listBackups(): Promise<BackupInfo[] | null>;
@@ -305,7 +305,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
       if (old) { await put('categories', { ...strip(old as any), is_archived: false }); return old.id; }
       const id = uuid();
       const order = Math.max(-1, ...tablesRef.current.categories.map(c => c.sort_order)) + 1;
-      await put('categories', { id, household_id: hidRef.current, name, is_fixed: fixed, color: order % 8, sort_order: order, is_archived: false });
+      await put('categories', { id, household_id: hidRef.current, name, is_fixed: fixed, color: order % 12, sort_order: order, is_archived: false });
       return id;
     },
     async setCategoryFixed(id, fixed) {
@@ -315,7 +315,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
     async updateCategory(id, patch) {
       const c = tablesRef.current.categories.find(x => x.id === id); if (!c) return;
       await put('categories', { ...strip(c as any), ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}),
-        ...(patch.group !== undefined ? { group_name: patch.group } : {}) });
+        ...(patch.group !== undefined ? { group_name: patch.group } : {}), ...(patch.color !== undefined ? { color: patch.color } : {}) });
     },
     async renameGroup(from, to) {
       for (const c of tablesRef.current.categories.filter(x => (x.group_name || '').trim() === from)) {
@@ -325,7 +325,8 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
     async updateBucket(id, patch) {
       const b = tablesRef.current.buckets.find(x => x.id === id); if (!b) return;
       await put('buckets', { ...strip(b as any), ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.targetCents !== undefined ? { target_cents: patch.targetCents } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}) });
+        ...(patch.targetCents !== undefined ? { target_cents: patch.targetCents } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}),
+        ...(patch.color !== undefined ? { color: patch.color } : {}) });
       if (patch.archived && householdRef.current?.default_fund_id === id) {
         const pool = tablesRef.current.buckets.find(x => x.kind === 'pool');
         if (pool) await store.updateSettings({ defaultFund: pool.id });
@@ -372,7 +373,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
       const old = tablesRef.current.buckets.find(b => b.is_archived && b.name.toLowerCase() === name.toLowerCase());
       if (old) { await put('buckets', { ...strip(old as any), is_archived: false, target_cents: targetCents }); return; }
       const order = Math.max(-1, ...tablesRef.current.buckets.map(b => b.sort_order)) + 1;
-      await put('buckets', { id: uuid(), household_id: hidRef.current, name, kind: 'savings', target_cents: targetCents, color: (order + 4) % 8, sort_order: order, is_archived: false });
+      await put('buckets', { id: uuid(), household_id: hidRef.current, name, kind: 'savings', target_cents: targetCents, color: (order + 4) % 12, sort_order: order, is_archived: false });
     },
     async updateSettings(patch) {
       const h = hidRef.current; if (!h) return;

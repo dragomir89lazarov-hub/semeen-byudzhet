@@ -31,7 +31,7 @@ export function VelocityChart({ t, series, budget, total, start, end }: {
         ) : null}
         <Line x1={L} x2={W - R} y1={Y(0)} y2={Y(0)} stroke={t.line} />
         <SvgText x={L} y={H - 8} fontSize={11} fill={t.ink2}>{dLabel(start)}</SvgText>
-        {series.length > 1 && series.length < total - 3
+        {X(series.length - 1) > L + 46 && X(series.length - 1) < W - R - 46
           ? <SvgText x={X(series.length - 1)} y={H - 8} textAnchor="middle" fontSize={11} fontWeight="600" fill={t.ink}>Днес</SvgText> : null}
         <SvgText x={W - R} y={H - 8} textAnchor="end" fontSize={11} fill={t.ink2}>{dLabel(end)}</SvgText>
       </Svg>
