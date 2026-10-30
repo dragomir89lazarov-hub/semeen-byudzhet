@@ -93,7 +93,7 @@ export default function BucketsScreen() {
         ) : (
           <>
             <H2>Нова сметка</H2>
-            <Field label="Име"><Input value={newName} onChangeText={setNewName} placeholder="Напр. Ваканция, Ремонт" autoFocus /></Field>
+            <Field label="Име"><Input value={newName} onChangeText={setNewName} placeholder="Напр. Ваканция, Ремонт" /></Field>
             <Field label="Цел в € (по избор)"><Input value={newTarget} onChangeText={setNewTarget} keyboardType="decimal-pad" placeholder="Напр. 1500" /></Field>
             {newErr ? <T small style={{ color: t.bad }}>{newErr}</T> : null}
             <View style={{ flexDirection: 'row', gap: 8 }}>

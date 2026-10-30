@@ -35,14 +35,14 @@ export default function CategoryManager() {
 
   const catRow = (k: Category, indent: boolean) => editId === k.id ? (
     <View key={k.id} style={{ gap: 10, backgroundColor: t.accentSoft, borderRadius: 12, padding: 12, marginLeft: indent ? 14 : 0 }}>
-      <Input value={name} onChangeText={setName} autoFocus />
+      <Input value={name} onChangeText={setName} />
       <Text style={{ color: t.ink2, fontSize: 13, fontWeight: '600' }}>Група</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         <Chip label="Без група" selected={newGroup === null && !group} onPress={() => { setGroup(null); setNewGroup(null); }} />
         {groups.map(g => <Chip key={g} label={g} selected={newGroup === null && group === g} onPress={() => { setGroup(g); setNewGroup(null); }} />)}
         <Chip label="+ Нова група" selected={newGroup !== null} onPress={() => setNewGroup('')} />
       </View>
-      {newGroup !== null ? <Input value={newGroup} onChangeText={setNewGroup} placeholder="Напр. Храна, Дом, Деца" autoFocus /> : null}
+      {newGroup !== null ? <Input value={newGroup} onChangeText={setNewGroup} placeholder="Напр. Храна, Дом, Деца" /> : null}
       <Text style={{ color: t.ink2, fontSize: 13, fontWeight: '600' }}>Цвят</Text>
       <ColorPicker value={color} onChange={setColor} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -71,7 +71,7 @@ export default function CategoryManager() {
         <View key={g} style={{ gap: 2, paddingTop: 6 }}>
           {editGroup === g ? (
             <View style={{ gap: 8, backgroundColor: t.sunk, borderRadius: 12, padding: 10 }}>
-              <Input value={groupText} onChangeText={setGroupText} autoFocus />
+              <Input value={groupText} onChangeText={setGroupText} />
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 <Btn variant="primary" title="Преименувай групата" onPress={async () => {
                   const n = groupText.trim(); if (!n) return toast('Въведете име на групата.');

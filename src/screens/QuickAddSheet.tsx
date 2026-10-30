@@ -136,7 +136,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
 
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}>
               <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0,00" placeholderTextColor={t.line}
-                autoFocus={!editing} accessibilityLabel="Сума в евро" onSubmitEditing={() => save()}
+                accessibilityLabel="Сума в евро" onSubmitEditing={() => save()}
                 style={{ fontSize: 46, fontWeight: '800', color: t.ink, minWidth: 140, textAlign: 'right', padding: 0 }} />
               <Text style={{ fontSize: 30, color: t.ink2 }}>€</Text>
             </View>
@@ -176,7 +176,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
                   <View style={{ backgroundColor: t.accentSoft, borderRadius: 12, padding: 12, gap: 8 }}>
                     <Field label="Нов вид разход">
                       <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <Input style={{ flex: 1 }} autoFocus placeholder="Напр. Аптека, Подаръци" value={newCatName} onChangeText={setNewCatName} onSubmitEditing={addInlineCategory} />
+                        <Input style={{ flex: 1 }} placeholder="Напр. Аптека, Подаръци" value={newCatName} onChangeText={setNewCatName} onSubmitEditing={addInlineCategory} />
                         <Btn variant="primary" title="Добави" onPress={addInlineCategory} />
                       </View>
                     </Field>
