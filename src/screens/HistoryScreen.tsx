@@ -100,8 +100,8 @@ export default function HistoryScreen() {
       <Card style={{ borderRadius: 18 }}>
         <Label>Похарчено · {name}</Label>
         <Text adjustsFontSizeToFit numberOfLines={1} style={[{ color: t.ink, fontSize: 44, fontWeight: '800', letterSpacing: -1.2 }, NUM]}>{eur0(spentAll)}</Text>
-        <T muted small>{dLabel(from)} – {dLabel(to)} · от общия бюджет {eur0(spentAll - spentFunds)} · от фондове {eur0(spentFunds)}</T>
-        <T muted small>Приходи {eur0(income)} · внесено във фондове {eur0(saved)}</T>
+        <T muted small>{dLabel(from)} – {dLabel(to)} · от общия бюджет {eur0(spentAll - spentFunds)} · от спестовни сметки {eur0(spentFunds)}</T>
+        <T muted small>Приходи {eur0(income)} · внесено в спестовни сметки {eur0(saved)}</T>
       </Card>
 
       <Card>

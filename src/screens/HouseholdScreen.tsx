@@ -19,7 +19,7 @@ export default function HouseholdScreen() {
       {s.lastError ? <T style={{ color: t.bad }}>{s.lastError}</T> : null}
       <Card>
         <H2>Създайте семейния бюджет</H2>
-        <T muted small>За първия от вас. Създават се основните категории, общ бюджет за заплатите, три спестовни фонда и текущият период ({dLabel(cyc.start)} – {dLabel(cyc.end)}, заплата на 25-о число). Всичко може да се промени после.</T>
+        <T muted small>За първия от вас. Създават се основните категории, общ бюджет за заплатите, три спестовни сметки и текущият период ({dLabel(cyc.start)} – {dLabel(cyc.end)}, заплата на 25-о число). Всичко може да се промени после.</T>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Field label="Вашето име"><Input value={me} onChangeText={setMe} placeholder="Драгомир" /></Field>
           <Field label="Име на партньора"><Input value={partner} onChangeText={setPartner} placeholder="Съпруга" /></Field>

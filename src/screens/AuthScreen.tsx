@@ -37,7 +37,7 @@ export default function AuthScreen() {
       <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 80, gap: 18 }} keyboardShouldPersistTaps="handled">
         <View style={{ gap: 6 }}>
           <Text style={{ color: t.ink, fontSize: 30, fontWeight: '800' }}>Семеен бюджет</Text>
-          <T muted>Общ бюджет за двама: дневен остатък, фондове и история, синхронизирани между телефоните ви.</T>
+          <T muted>Общ бюджет за двама: дневен остатък, сметки и история, синхронизирани между телефоните ви.</T>
         </View>
         <Card>
           <H2>{mode === 'in' ? 'Вход' : 'Нов профил'}</H2>

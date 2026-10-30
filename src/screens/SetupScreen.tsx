@@ -144,21 +144,21 @@ export default function SetupScreen() {
       </Card>
 
       <Card>
-        <H2>Спестовни фондове</H2>
-        <Input placeholder="Име на нов фонд" value={newBucket} onChangeText={setNewBucket} />
+        <H2>Спестовни сметки</H2>
+        <Input placeholder="Име на нова сметка" value={newBucket} onChangeText={setNewBucket} />
         <Input placeholder="Цел в € (по избор)" keyboardType="decimal-pad" value={newTarget} onChangeText={setNewTarget} />
-        <Btn title="Добави фонд" style={{ alignSelf: 'flex-start' }} onPress={async () => {
-          const name = newBucket.trim(); if (!name) return toast('Въведете име на фонд.');
+        <Btn title="Добави сметка" style={{ alignSelf: 'flex-start' }} onPress={async () => {
+          const name = newBucket.trim(); if (!name) return toast('Въведете име на сметката.');
           const target = newTarget.trim() ? Engine.parseAmountToCents(newTarget) : null;
           if (newTarget.trim() && !target) return toast('Проверете сумата за целта.');
-          await s.addBucket(name, target); setNewBucket(''); setNewTarget(''); toast('Фондът е добавен');
+          await s.addBucket(name, target); setNewBucket(''); setNewTarget(''); toast('Сметката е добавена');
         }} />
       </Card>
 
       <Card>
-        <H2>Хора</H2>
+        <H2>Потребители</H2>
         {people.map((p, i) => (
-          <Field key={i} label={`Човек ${i + 1}`}><Input value={p} onChangeText={v => setPeople(ps => ps.map((x, j) => (j === i ? v : x)))} /></Field>
+          <Field key={i} label={`Потребител ${i + 1}`}><Input value={p} onChangeText={v => setPeople(ps => ps.map((x, j) => (j === i ? v : x)))} /></Field>
         ))}
         <Btn title="Запази" style={{ alignSelf: 'flex-start' }} onPress={async () => {
           await s.updateSettings({ people: people.map((p, i) => p.trim() || m.settings.people[i]) }); toast('Записано');
@@ -183,7 +183,7 @@ export default function SetupScreen() {
 
       <Card style={{ borderWidth: 1, borderColor: t.bad }}>
         <H2>Изчисти всички данни</H2>
-        <T muted small>За тестове. Изтрива всички разходи, приходи, вноски и тегления, периоди, планове, ваши категории и фондове, и връща началните категории и фондове с нов текущ период. Профилите ви и връзката между двата телефона остават. Преди изчистването автоматично се прави резервно копие, от което можете да възстановите всичко.</T>
+        <T muted small>За тестове. Изтрива всички разходи, приходи, вноски и тегления, периоди, планове, ваши категории и сметки, и връща началните категории и сметки с нов текущ период. Профилите ви и връзката между двата телефона остават. Преди изчистването автоматично се прави резервно копие, от което можете да възстановите всичко.</T>
         <Field label="Напишете ИЗТРИЙ, за да потвърдите"><Input value={resetText} onChangeText={setResetText} autoCapitalize="characters" placeholder="ИЗТРИЙ" /></Field>
         <Btn variant="dangerSolid" title={resetting ? 'Изчистване…' : 'Изтрий всичко'} disabled={resetText.trim().toUpperCase() !== 'ИЗТРИЙ' || resetting} onPress={async () => {
           setResetting(true);

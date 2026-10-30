@@ -23,8 +23,8 @@ export const useNav = () => { const n = useContext(NavCtx); if (!n) throw new Er
 export function txMeta(m: Model, t: Tx, colors: string[]) {
   const c = (i: number | undefined) => colors[(((i ?? 0) % 8) + 8) % 8];
   if (t.kind === 'income') return { title: 'Приход' + (t.paidBy ? ' · ' + t.paidBy : ''), color: '', mark: '+', sign: '+', income: true, from: '' };
-  if (t.kind === 'bucket_deposit') { const b = bucketOf(m, t.bucketId); return { title: 'Към ' + (b?.name || 'фонд'), color: c(b?.color), mark: '→', sign: '', income: false, from: '' }; }
-  if (t.kind === 'bucket_withdrawal') { const b = bucketOf(m, t.bucketId); return { title: 'От ' + (b?.name || 'фонд'), color: c(b?.color), mark: '←', sign: '+', income: true, from: '' }; }
+  if (t.kind === 'bucket_deposit') { const b = bucketOf(m, t.bucketId); return { title: 'Към ' + (b?.name || 'сметка'), color: c(b?.color), mark: '→', sign: '', income: false, from: '' }; }
+  if (t.kind === 'bucket_withdrawal') { const b = bucketOf(m, t.bucketId); return { title: 'От ' + (b?.name || 'сметка'), color: c(b?.color), mark: '←', sign: '+', income: true, from: '' }; }
   const k = catOf(m, t.categoryId); const b = t.bucketId ? bucketOf(m, t.bucketId) : null;
   return { title: k?.name || 'Разход', color: c(k?.color), mark: (k?.name || '?').slice(0, 2), sign: '−', income: false, from: b ? 'от ' + b.name : '' };
 }

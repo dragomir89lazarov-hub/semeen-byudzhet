@@ -25,15 +25,15 @@ export default function BucketsScreen() {
   const pr = c ? computePool(m, c) : null;
 
   const DefaultControl = ({ id, name }: { id: string; name: string }) => def === id
-    ? <View style={{ backgroundColor: t.accentSoft, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}><Text style={{ color: t.accent, fontWeight: '800', fontSize: 13.5 }}>★ Основен</Text></View>
-    : <Btn variant="accentOutline" title="☆ Направи основен" onPress={async () => { await updateSettings({ defaultFund: id }); toast(`„${name}“ е основният фонд`); }} />;
+    ? <View style={{ backgroundColor: t.accentSoft, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}><Text style={{ color: t.accent, fontWeight: '800', fontSize: 13.5 }}>★ Основна</Text></View>
+    : <Btn variant="accentOutline" title="☆ Направи основна" onPress={async () => { await updateSettings({ defaultFund: id }); toast(`„${name}“ е основната сметка`); }} />;
 
   return (
     <Screen>
       <Card style={{ borderRadius: 18 }}>
-        <Label>Общо в спестовните фондове</Label>
+        <Label>Общо в спестовните сметки</Label>
         <Text adjustsFontSizeToFit numberOfLines={1} style={[{ color: t.ink, fontSize: 44, fontWeight: '800', letterSpacing: -1.2 }, NUM]}>{eur(total)}</Text>
-        <T muted small>Отделно от ежедневните разходи. Внасянето във фонд намалява дневния лимит за периода; плащане от фонд не го засяга. Фондът с ★ се показва в „Днес“ и за двама ви.</T>
+        <T muted small>Отделно от ежедневните разходи. Внасянето в спестовна сметка намалява дневния лимит за периода; плащане от нея не го засяга. Сметката с ★ се показва в „Днес“ и за двама ви.</T>
       </Card>
 
       {c && pr ? (
@@ -89,23 +89,23 @@ export default function BucketsScreen() {
 
       <Card>
         {!adding ? (
-          <Btn variant="accentOutline" block title="+ Нов фонд" onPress={() => { setAdding(true); setNewErr(''); }} />
+          <Btn variant="accentOutline" block title="+ Нова сметка" onPress={() => { setAdding(true); setNewErr(''); }} />
         ) : (
           <>
-            <H2>Нов фонд</H2>
+            <H2>Нова сметка</H2>
             <Field label="Име"><Input value={newName} onChangeText={setNewName} placeholder="Напр. Ваканция, Ремонт" autoFocus /></Field>
             <Field label="Цел в € (по избор)"><Input value={newTarget} onChangeText={setNewTarget} keyboardType="decimal-pad" placeholder="Напр. 1500" /></Field>
             {newErr ? <T small style={{ color: t.bad }}>{newErr}</T> : null}
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Btn variant="primary" title="Създай фонд" onPress={async () => {
+              <Btn variant="primary" title="Създай сметка" onPress={async () => {
                 const name = newName.trim();
-                if (!name) return setNewErr('Въведете име на фонда.');
-                if (m.buckets.some(b => !b.archived && b.name.toLowerCase() === name.toLowerCase())) return setNewErr('Вече има фонд с това име.');
+                if (!name) return setNewErr('Въведете име на сметката.');
+                if (m.buckets.some(b => !b.archived && b.name.toLowerCase() === name.toLowerCase())) return setNewErr('Вече има сметка с това име.');
                 const target = newTarget.trim() ? Engine.parseAmountToCents(newTarget) : null;
                 if (newTarget.trim() && !target) return setNewErr('Проверете сумата за целта, например 1500 или 1500,50.');
                 await addBucket(name, target);
                 setAdding(false); setNewName(''); setNewTarget(''); setNewErr('');
-                toast(`Фондът „${name}“ е създаден`);
+                toast(`Сметката „${name}“ е създадена`);
               }} />
               <Btn title="Отказ" onPress={() => { setAdding(false); setNewErr(''); }} />
             </View>
@@ -126,7 +126,7 @@ function EditFund({ b, isPool, balance, onDone }: { b: Bucket; isPool?: boolean;
   const [err, setErr] = useState('');
   async function save() {
     const n = name.trim(); if (!n) return setErr('Въведете име.');
-    if (m.buckets.some(x => x.id !== b.id && !x.archived && x.name.toLowerCase() === n.toLowerCase())) return setErr('Вече има фонд с това име.');
+    if (m.buckets.some(x => x.id !== b.id && !x.archived && x.name.toLowerCase() === n.toLowerCase())) return setErr('Вече има сметка с това име.');
     const tc = target.trim() ? Engine.parseAmountToCents(target) : null;
     if (target.trim() && !tc) return setErr('Проверете сумата за целта.');
     await s.updateBucket(b.id, isPool ? { name: n } : { name: n, targetCents: tc });
@@ -139,7 +139,7 @@ function EditFund({ b, isPool, balance, onDone }: { b: Bucket; isPool?: boolean;
       await s.saveTx({ kind: 'bucket_withdrawal', amountCents: balance, occurredOn: today(), categoryId: null, bucketId: b.id, paidBy: null, note: `Закриване на „${b.name}“` });
     }
     await s.updateBucket(b.id, { archived: true });
-    toast(`Фондът „${b.name}“ е изтрит`); onDone();
+    toast(`Сметката „${b.name}“ е изтрита`); onDone();
   }
   return (
     <View style={{ gap: 8, backgroundColor: t.accentSoft, borderRadius: 12, padding: 12 }}>
@@ -149,9 +149,9 @@ function EditFund({ b, isPool, balance, onDone }: { b: Bucket; isPool?: boolean;
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Btn variant="primary" title="Запази" onPress={save} />
         <Btn title="Отказ" onPress={onDone} />
-        {!isPool ? <Btn variant={arm ? 'dangerSolid' : 'danger'} title={arm ? 'Натиснете отново за изтриване' : 'Изтрий фонда'} onPress={remove} /> : null}
+        {!isPool ? <Btn variant={arm ? 'dangerSolid' : 'danger'} title={arm ? 'Натиснете отново за изтриване' : 'Изтрий сметката'} onPress={remove} /> : null}
       </View>
-      {arm && balance > 0 ? <T small style={{ color: t.bad }}>Наличността {eur(balance)} ще бъде върната в общия бюджет, след което фондът ще бъде изтрит.</T> : null}
+      {arm && balance > 0 ? <T small style={{ color: t.bad }}>Наличността {eur(balance)} ще бъде върната в общия бюджет, след което сметката ще бъде изтрита.</T> : null}
     </View>
   );
 }

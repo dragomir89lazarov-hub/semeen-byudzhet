@@ -40,7 +40,7 @@ export default function BackupsCard() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={[{ color: t.ink, fontWeight: '700' }, NUM]}>{when(b.created_at)}</Text>
-                  <Text style={{ color: t.ink2, fontSize: 12.5 }}>{KIND[b.kind]} · {b.summary?.transactions ?? 0} записа · {b.summary?.categories ?? 0} категории · {b.summary?.buckets ?? 0} фонда</Text>
+                  <Text style={{ color: t.ink2, fontSize: 12.5 }}>{KIND[b.kind]} · {b.summary?.transactions ?? 0} записа · {b.summary?.categories ?? 0} категории · {b.summary?.buckets ?? 0} сметки</Text>
                 </View>
                 <Btn variant={armed === b.id ? 'dangerSolid' : 'default'} title={armed === b.id ? 'Потвърди' : 'Възстанови'} disabled={busy} onPress={async () => {
                   if (armed !== b.id) return setArmed(b.id);

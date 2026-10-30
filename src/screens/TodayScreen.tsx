@@ -89,7 +89,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
   const usedPct = flexBudget > 0 ? Math.min(100, (r.spentFlexibleCents / flexBudget) * 100) : 100;
   const timePct = Math.min(100, ((clock.daysElapsed + 1) / clock.totalDays) * 100);
   let msg: string;
-  if (r.status === 'overdrawn') msg = `Бюджетът е надхвърлен с ${eur(-r.remainingCents)}. Прехвърлете пари от фонд или намалете разходите.`;
+  if (r.status === 'overdrawn') msg = `Бюджетът е надхвърлен с ${eur(-r.remainingCents)}. Прехвърлете пари от спестовна сметка или намалете разходите.`;
   else if (r.status === 'overspending' && r.runOutDate) msg = `С това темпо парите ще свършат на ${dwLabel(r.runOutDate)}, ${days(Engine.daysInclusive(r.runOutDate, c.end) - 1)} преди заплата.`;
   else if (r.status === 'tight') msg = `В график, но на ръба: около ${eur(r.projectedEndBalanceCents)} ще останат до заплата.`;
   else msg = `В график: около ${eur(r.projectedEndBalanceCents)} ще останат до заплата.`;
@@ -119,7 +119,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
           <View style={{ gap: 4 }}><T muted small>Изминало време: {Math.round(timePct)}%</T><Track t={t} pct={timePct} color={t.ink2} /></View>
           <View style={{ gap: 4 }}><T muted small>Използван бюджет: {Math.round(usedPct)}%</T><Track t={t} pct={usedPct} color={usedPct > timePct + 5 ? t.bad : t.accent} /></View>
         </View>
-        <Kpis items={[['Похарчено', r.spentFixedCents + r.spentFlexibleCents], ['Дневен лимит', r.dailyAllowanceCents], ['Внесено във фондове', r.netToBucketsCents]]} />
+        <Kpis items={[['Похарчено', r.spentFixedCents + r.spentFlexibleCents], ['Дневен лимит', r.dailyAllowanceCents], ['Внесено в спестовни сметки', r.netToBucketsCents]]} />
       </Card>
 
       <Card>
@@ -150,7 +150,7 @@ function FundToday({ m, c, b }: { m: Model; c: Cycle; b: Bucket }) {
   const explain = {
     today: `Дневен лимит ${eur(f.dailyAllowanceCents)} (наличността в полунощ ÷ ${days(f.daysLeft)}) − платено днес ${eur(f.spentTodayCents)}`,
     week: `Лимит за ${dLabel(f.weekStart)} – ${dLabel(f.weekEnd)}: ${eur(f.weekAllowanceCents)} − платено тази седмица ${eur(f.spentThisWeekCents)}`,
-    period: `Наличност във фонда за оставащите ${days(f.daysLeft)}, до ${dwLabel(c.end)} включително`,
+    period: `Наличност в сметката за оставащите ${days(f.daysLeft)}, до ${dwLabel(c.end)} включително`,
     avg: `${eur(f.balanceCents)} ÷ ${days(f.daysLeft)} до края на периода`,
   }[nav.metric];
   const moves = m.txs.filter(x => x.bucketId === b.id).sort(txSort);
@@ -164,11 +164,11 @@ function FundToday({ m, c, b }: { m: Model; c: Cycle; b: Bucket }) {
         <Row><Label>★ {b.name}</Label>{clock.phase === 'ended' ? <Pill status="tight" text="Периодът приключи" /> : null}</Row>
         <BigNumber value={vals[nav.metric]} label={METRIC_LABEL[nav.metric]} explain={explain} bad={vals[nav.metric] < 0} />
         <Metrics vals={vals} />
-        <T>Плащанията от този фонд не намаляват общия бюджет.{b.targetCents ? ` Цел ${eur0(b.targetCents)} (${Math.max(0, Math.round((f.balanceCents / b.targetCents) * 100))}%).` : ''}</T>
+        <T>Плащанията от тази сметка не намаляват общия бюджет.{b.targetCents ? ` Цел ${eur0(b.targetCents)} (${Math.max(0, Math.round((f.balanceCents / b.targetCents) * 100))}%).` : ''}</T>
         <Kpis items={[['Внесено този период', added], ['Платено този период', paid], ['Общ бюджет до края', pr.remainingCents]]} />
       </Card>
       <Card>
-        <Row><H2>Движения във фонда</H2><Btn variant="link" title="Всички фондове" onPress={() => nav.setTab('buckets')} /></Row>
+        <Row><H2>Движения в сметката</H2><Btn variant="link" title="Всички сметки" onPress={() => nav.setTab('buckets')} /></Row>
         {moves.length ? moves.slice(0, 8).map((x, i) => <TxRow key={x.id} m={m} tx={x} first={i === 0} onPress={() => nav.openSheet({ editId: x.id })} />)
           : <T muted small>Още няма движения.</T>}
       </Card>
@@ -181,7 +181,7 @@ function TxListScreen({ m, c }: { m: Model; c: Cycle | null }) {
   const f = nav.txFilter;
   const list = m.txs.filter(x => c && inCycle(x, c)).filter(x => f === 'all' ? true : f === 'income' ? x.kind === 'income'
     : f === 'buckets' ? x.kind !== 'income' && !!x.bucketId : x.categoryId === f).sort(txSort);
-  const chips: [string, string][] = [['all', 'Всички'], ['income', 'Приходи'], ['buckets', 'Фондове'], ...activeCats(m).map(k => [k.id, k.name] as [string, string])];
+  const chips: [string, string][] = [['all', 'Всички'], ['income', 'Приходи'], ['buckets', 'Сметки'], ...activeCats(m).map(k => [k.id, k.name] as [string, string])];
   const groups: { day: string; items: typeof list }[] = [];
   for (const x of list) { const g = groups[groups.length - 1]; if (g && g.day === x.occurredOn) g.items.push(x); else groups.push({ day: x.occurredOn, items: [x] }); }
   return (

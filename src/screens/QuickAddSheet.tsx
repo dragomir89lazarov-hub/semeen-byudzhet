@@ -84,7 +84,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
       }
     } else if (mode === 'income') { kind = 'income'; who = paidBy; }
     else {
-      if (!bucketId) return setError('Изберете фонд.');
+      if (!bucketId) return setError('Изберете сметка.');
       kind = direction === 'to_bucket' ? 'bucket_deposit' : 'bucket_withdrawal'; bucket = bucketId;
       if (direction === 'from_bucket') {
         const bal = bucketBalance(others, bucketId);
@@ -126,7 +126,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
 
             {!editing ? (
               <View style={{ flexDirection: 'row', backgroundColor: t.sunk, borderRadius: 12, padding: 3, gap: 3 }}>
-                {([['expense', 'Разход'], ['income', 'Приход'], ['transfer', 'Фонд']] as [Mode, string][]).map(([k, l]) => (
+                {([['expense', 'Разход'], ['income', 'Приход'], ['transfer', 'Сметка']] as [Mode, string][]).map(([k, l]) => (
                   <Pressable key={k} onPress={() => { setMode(k); setError(''); }} style={{ flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center', backgroundColor: mode === k ? t.surface : 'transparent' }}>
                     <Text style={{ fontWeight: '700', color: mode === k ? t.ink : t.ink2 }}>{l}</Text>
                   </Pressable>
@@ -200,13 +200,13 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
             ) : (
               <>
                 <View style={{ flexDirection: 'row', backgroundColor: t.sunk, borderRadius: 12, padding: 3, gap: 3 }}>
-                  {([['to_bucket', 'Към фонд'], ['from_bucket', 'Обратно към общия бюджет']] as const).map(([k, l]) => (
+                  {([['to_bucket', 'Към сметка'], ['from_bucket', 'Обратно към общия бюджет']] as const).map(([k, l]) => (
                     <Pressable key={k} onPress={() => setDirection(k)} style={{ flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center', backgroundColor: direction === k ? t.surface : 'transparent' }}>
                       <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontWeight: '700', color: direction === k ? t.ink : t.ink2 }}>{l}</Text>
                     </Pressable>
                   ))}
                 </View>
-                <Field label="Фонд"><Chips>{bks.map(b => <Chip key={b.id} label={b.name} selected={bucketId === b.id} onPress={() => setBucketId(b.id)} />)}</Chips></Field>
+                <Field label="Сметка"><Chips>{bks.map(b => <Chip key={b.id} label={b.name} selected={bucketId === b.id} onPress={() => setBucketId(b.id)} />)}</Chips></Field>
               </>
             )}
 
