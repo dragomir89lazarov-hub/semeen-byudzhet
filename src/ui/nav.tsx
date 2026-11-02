@@ -9,7 +9,7 @@ import { NUM } from './kit';
 export type Tab = 'today' | 'buckets' | 'history' | 'setup';
 export type Metric = 'today' | 'week' | 'period' | 'avg';
 export interface SheetInit {
-  mode?: 'expense' | 'income' | 'transfer'; editId?: string; source?: string | null; bucketId?: string | null; direction?: 'to_bucket' | 'from_bucket';
+  mode?: 'expense' | 'income' | 'transfer'; editId?: string; source?: string | null; bucketId?: string | null; direction?: 'to_bucket' | 'from_bucket'; incomeTo?: string | null;
 }
 export interface Nav {
   tab: Tab; setTab(t: Tab): void; sub: string | null; setSub(s: string | null): void;
@@ -22,7 +22,7 @@ export const useNav = () => { const n = useContext(NavCtx); if (!n) throw new Er
 
 export function txMeta(m: Model, t: Tx, colors: string[]) {
   const c = (i: number | undefined) => { const n = colors.length; return colors[(((i ?? 0) % n) + n) % n]; };
-  if (t.kind === 'income') return { title: 'Приход' + (t.paidBy ? ' · ' + t.paidBy : ''), color: '', mark: '+', sign: '+', income: true, from: '' };
+  if (t.kind === 'income') { const b = t.bucketId ? bucketOf(m, t.bucketId) : null; return { title: 'Приход' + (t.paidBy ? ' · ' + t.paidBy : ''), color: '', mark: '+', sign: '+', income: true, from: b ? 'в ' + b.name : '' }; }
   if (t.kind === 'bucket_deposit') { const b = bucketOf(m, t.bucketId); return { title: 'Към ' + (b?.name || 'сметка'), color: c(b?.color), mark: '→', sign: '', income: false, from: '' }; }
   if (t.kind === 'bucket_withdrawal') { const b = bucketOf(m, t.bucketId); return { title: 'От ' + (b?.name || 'сметка'), color: c(b?.color), mark: '←', sign: '+', income: true, from: '' }; }
   const k = catOf(m, t.categoryId); const b = t.bucketId ? bucketOf(m, t.bucketId) : null;

@@ -106,7 +106,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
   return (
     <Screen>
       <Card style={{ borderRadius: 18, gap: 12 }}>
-        <Row><Label>★ {pool.name}</Label><Pill status={r.status} text={STATUS_TEXT[r.status]} /></Row>
+        <Row><Label>★ {[pool.name, ...m.buckets.filter(b => b.inBudget && !b.archived && b.kind !== 'pool').map(b => b.name)].join(' + ')}</Label><Pill status={r.status} text={STATUS_TEXT[r.status]} /></Row>
         <BigNumber value={vals[nav.metric]} label={METRIC_LABEL[nav.metric]} explain={explain} bad={vals[nav.metric] < 0 || r.status === 'overdrawn' || r.status === 'overspending'} />
         <Metrics vals={vals} />
         {r.leftTodayCents < 0 ? (

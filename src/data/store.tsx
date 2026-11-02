@@ -43,7 +43,7 @@ function toModel(h: HouseholdRow | null, t: Tables): Model {
     },
     cycles: t.cycles.map(c => ({ id: c.id, start: c.start_date, end: c.end_date, carryoverCents: Number(c.carryover_cents || 0), budgets: budgets[c.id] || {} })),
     categories: t.categories.map(c => ({ id: c.id, name: c.name, color: c.color, fixed: c.is_fixed, archived: c.is_archived, order: c.sort_order, group: c.group_name?.trim() || null })),
-    buckets: t.buckets.map(b => ({ id: b.id, name: b.name, kind: b.kind, color: b.color, targetCents: b.target_cents == null ? null : Number(b.target_cents), targetDate: b.target_date, archived: b.is_archived, order: b.sort_order })),
+    buckets: t.buckets.map(b => ({ id: b.id, name: b.name, kind: b.kind, color: b.color, targetCents: b.target_cents == null ? null : Number(b.target_cents), targetDate: b.target_date, archived: b.is_archived, order: b.sort_order, inBudget: !!b.in_budget })),
     txs: t.txs.filter(x => !x.deleted_at).map(rowToTx),
   };
 }
@@ -80,7 +80,7 @@ interface Store {
   updateCategory(id: string, patch: { name?: string; archived?: boolean; group?: string | null; color?: number }): Promise<void>;
   renameGroup(from: string, to: string | null): Promise<void>;
   addBucket(name: string, targetCents: number | null): Promise<void>;
-  updateBucket(id: string, patch: { name?: string; targetCents?: number | null; archived?: boolean; color?: number }): Promise<void>;
+  updateBucket(id: string, patch: { name?: string; targetCents?: number | null; archived?: boolean; color?: number; inBudget?: boolean }): Promise<void>;
   resetAll(): Promise<boolean>;
   createBackup(): Promise<boolean>;
   listBackups(): Promise<BackupInfo[] | null>;
@@ -326,7 +326,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
       const b = tablesRef.current.buckets.find(x => x.id === id); if (!b) return;
       await put('buckets', { ...strip(b as any), ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.targetCents !== undefined ? { target_cents: patch.targetCents } : {}), ...(patch.archived !== undefined ? { is_archived: patch.archived } : {}),
-        ...(patch.color !== undefined ? { color: patch.color } : {}) });
+        ...(patch.color !== undefined ? { color: patch.color } : {}), ...(patch.inBudget !== undefined ? { in_budget: patch.inBudget } : {}) });
       if (patch.archived && householdRef.current?.default_fund_id === id) {
         const pool = tablesRef.current.buckets.find(x => x.kind === 'pool');
         if (pool) await store.updateSettings({ defaultFund: pool.id });

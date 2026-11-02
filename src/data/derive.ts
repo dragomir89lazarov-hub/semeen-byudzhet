@@ -13,8 +13,12 @@ export const inCycle = (t: Tx, c: Cycle) => t.occurredOn >= c.start && t.occurre
 export const sortedCycles = (m: Model) => [...m.cycles].sort((a, b) => (a.start < b.start ? -1 : 1));
 export const activeCats = (m: Model): Category[] => m.categories.filter(c => !c.archived).sort((a, b) => a.order - b.order);
 export const activeBuckets = (m: Model): Bucket[] => m.buckets.filter(b => !b.archived).sort((a, b) => a.order - b.order);
-export const poolOf = (m: Model): Bucket => m.buckets.find(b => b.kind === 'pool') || { id: 'pool', name: 'Заплати (общ бюджет)', kind: 'pool', color: 0, targetCents: null, targetDate: null, archived: false, order: -1 };
+export const poolOf = (m: Model): Bucket => m.buckets.find(b => b.kind === 'pool') || { id: 'pool', name: 'Заплати (общ бюджет)', kind: 'pool', color: 0, targetCents: null, targetDate: null, archived: false, order: -1, inBudget: false };
 export const savingsOf = (m: Model) => activeBuckets(m).filter(b => b.kind !== 'pool');
+/** Accounts that are part of the everyday budget, like food vouchers (their money counts with the salaries fund). */
+export const budgetAccountIds = (m: Model) => new Set(m.buckets.filter(b => b.kind !== 'pool' && b.inBudget).map(b => b.id));
+/** Spending that counts against the everyday budget: from the salaries fund or a budget account. */
+export const isBudgetSpend = (m: Model, t: Tx, ids = budgetAccountIds(m)) => t.kind === 'expense' && (!t.bucketId || ids.has(t.bucketId));
 export const defaultFundId = (m: Model) => {
   const id = m.settings.defaultFund;
   return id && savingsOf(m).some(b => b.id === id) ? id : poolOf(m).id;
@@ -32,7 +36,7 @@ export function currentCycle(m: Model): Cycle | null {
 function allowanceInput(m: Model, c: Cycle, day?: string): Engine.AllowanceInput {
   return {
     cycle: { id: c.id, startDate: c.start, endDate: c.end, openingCarryoverCents: c.carryoverCents },
-    transactions: m.txs.filter(t => inCycle(t, c)).map(toEngineTx),
+    transactions: Engine.mergeBudgetAccounts(m.txs.filter(t => inCycle(t, c)).map(toEngineTx), budgetAccountIds(m)),
     categories: m.categories.map(x => ({ id: x.id, isFixed: x.fixed })),
     budgetLines: Object.entries(c.budgets).map(([categoryId, plannedCents]) => ({ categoryId, plannedCents })),
     today: day || today(),
@@ -47,7 +51,8 @@ export const bucketBalance = (m: Model, bucketId: string) => Engine.bucketBalanc
 
 export function spentByCat(m: Model, c: Cycle): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const t of m.txs) if (t.kind === 'expense' && !t.bucketId && inCycle(t, c)) out[t.categoryId!] = (out[t.categoryId!] || 0) + t.amountCents;
+  const ids = budgetAccountIds(m);
+  for (const t of m.txs) if (isBudgetSpend(m, t, ids) && inCycle(t, c)) out[t.categoryId!] = (out[t.categoryId!] || 0) + t.amountCents;
   return out;
 }
 
@@ -90,7 +95,8 @@ export function statKeyOf(m: Model, categoryId: string | null, grouped: boolean)
 /** Spending from the salaries fund in a cycle, per statistic row. */
 export function spentByStat(m: Model, c: Cycle, grouped: boolean): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const t of m.txs) if (t.kind === 'expense' && !t.bucketId && inCycle(t, c)) {
+  const ids = budgetAccountIds(m);
+  for (const t of m.txs) if (isBudgetSpend(m, t, ids) && inCycle(t, c)) {
     const k = statKeyOf(m, t.categoryId, grouped); out[k] = (out[k] || 0) + t.amountCents;
   }
   return out;

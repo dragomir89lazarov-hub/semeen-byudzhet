@@ -10,7 +10,7 @@ export interface CategoryRow { id: string; household_id: string; name: string; c
 export interface BudgetRow { household_id: string; cycle_id: string; category_id: string; planned_cents: number; version: number; updated_at?: string }
 export interface BucketRow {
   id: string; household_id: string; name: string; kind: 'pool' | 'savings'; color: number; target_cents: number | null;
-  target_date: string | null; is_archived: boolean; sort_order: number; version: number; updated_at?: string;
+  target_date: string | null; is_archived: boolean; sort_order: number; in_budget?: boolean; version: number; updated_at?: string;
 }
 export interface TxRow {
   id: string; household_id: string; kind: TxKind; amount_cents: number; occurred_on: string;
@@ -35,7 +35,7 @@ export const TABLE: Record<TableKey, string> = {
 export interface Settings { people: string[]; payday: PaydayRule; bufferCents: number; defaultFund: string | null; inviteCode: string }
 export interface Cycle { id: string; start: string; end: string; carryoverCents: number; budgets: Record<string, number> }
 export interface Category { id: string; name: string; color: number; fixed: boolean; archived: boolean; order: number; group: string | null }
-export interface Bucket { id: string; name: string; kind: 'pool' | 'savings'; color: number; targetCents: number | null; targetDate: string | null; archived: boolean; order: number }
+export interface Bucket { id: string; name: string; kind: 'pool' | 'savings'; color: number; targetCents: number | null; targetDate: string | null; archived: boolean; order: number; inBudget: boolean }
 export interface Tx {
   id: string; kind: TxKind; amountCents: number; occurredOn: string; categoryId: string | null; bucketId: string | null;
   paidBy: string | null; note: string; loggedBy: string | null; createdAt: string; version: number;

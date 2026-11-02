@@ -342,9 +342,25 @@ export function velocitySeries(input: AllowanceInput): { date: ISODate; actualCe
 // ─────────────────────────────────────────────────────────────
 // 3. Savings buckets
 // ─────────────────────────────────────────────────────────────
+/**
+ * Accounts that are part of the everyday budget (e.g. food vouchers) are merged into the salaries
+ * fund before any budget math: income into them and spending from them count like the salaries
+ * fund's own, and moving money between them and the salaries fund is just an internal transfer.
+ */
+export function mergeBudgetAccounts(txs: Tx[], budgetAccountIds: Set<string>): Tx[] {
+  if (!budgetAccountIds.size) return txs;
+  const out: Tx[] = [];
+  for (const t of txs) {
+    if (!t.bucketId || !budgetAccountIds.has(t.bucketId)) { out.push(t); continue; }
+    if (t.kind === 'income' || t.kind === 'expense') out.push({ ...t, bucketId: null });
+    // bucket_deposit / bucket_withdrawal between the salaries fund and a budget account: internal, dropped
+  }
+  return out;
+}
+
 export function bucketBalance(bucketId: string, txs: Tx[]): number {
   return sum(txs.filter(t => !t.deletedAt && t.bucketId === bucketId).map(t =>
-    t.kind === 'bucket_deposit' ? t.amountCents : -t.amountCents));
+    t.kind === 'bucket_deposit' || t.kind === 'income' ? t.amountCents : -t.amountCents));
 }
 
 export interface FundAllowanceResult {

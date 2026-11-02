@@ -6,7 +6,7 @@ import { useStore } from '../data/store';
 import { dLabel, eur, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
 import { Ring, WalletIcon } from '../ui/charts';
-import { Btn, Card, ColorPicker, Field, H2, Input, Label, NUM, Screen, T, useToast } from '../ui/kit';
+import { Btn, Card, Check, ColorPicker, Field, H2, Input, Label, NUM, Screen, T, useToast } from '../ui/kit';
 import * as Engine from '../engine/budgetEngine';
 import { TxRow, useNav } from '../ui/nav';
 
@@ -20,7 +20,8 @@ export default function BucketsScreen() {
   const c = currentCycle(m);
   const pool = poolOf(m);
   const bs = savingsOf(m);
-  const total = bs.reduce((a, b) => a + bucketBalance(m, b.id), 0);
+  const budgetAccs = bs.filter(b => b.inBudget);
+  const total = bs.filter(b => !b.inBudget).reduce((a, b) => a + bucketBalance(m, b.id), 0);
   const def = defaultFundId(m);
   const pr = c ? computePool(m, c) : null;
 
@@ -33,7 +34,7 @@ export default function BucketsScreen() {
       <Card style={{ borderRadius: 18 }}>
         <Label>Общо в спестовните сметки</Label>
         <Text adjustsFontSizeToFit numberOfLines={1} style={[{ color: t.ink, fontSize: 44, fontWeight: '800', letterSpacing: -1.2 }, NUM]}>{eur(total)}</Text>
-        <T muted small>Отделно от ежедневните разходи. Внасянето в спестовна сметка намалява дневния лимит за периода; плащане от нея не го засяга. Сметката с ★ се показва в „Днес“ и за двама ви.</T>
+        <T muted small>Отделно от ежедневните разходи. Внасянето в спестовна сметка намалява дневния лимит за периода; плащане от нея не го засяга. Сметките, отбелязани „Част от общия бюджет“ (напр. ваучери), не са тук: те се броят заедно със заплатите. Сметката с ★ се показва в „Днес“ и за двама ви.</T>
       </Card>
 
       {c && pr ? (
@@ -44,6 +45,7 @@ export default function BucketsScreen() {
               <H2>{pool.name}</H2>
               <Text style={[{ color: t.ink, fontSize: 24, fontWeight: '800' }, NUM]}>{eur(pr.remainingCents)}</Text>
               <T muted small>остават до {dLabel(c.end)} · приходи този период {eur0(pr.incomeCents)}</T>
+              {budgetAccs.length ? <T muted small>Включва {budgetAccs.map(b => `${b.name} ${eur(bucketBalance(m, b.id))}`).join(', ')}</T> : null}
             </View>
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -60,7 +62,7 @@ export default function BucketsScreen() {
         const bal = bucketBalance(m, b.id);
         const pct = b.targetCents ? Math.max(0, Math.min(1, bal / b.targetCents)) : null;
         const moves = m.txs.filter(x => x.bucketId === b.id).sort(txSort);
-        const inCyc = c ? moves.filter(x => inCycle(x, c)).reduce((a, x) => a + (x.kind === 'bucket_deposit' ? x.amountCents : -x.amountCents), 0) : 0;
+        const inCyc = c ? moves.filter(x => inCycle(x, c)).reduce((a, x) => a + (x.kind === 'bucket_deposit' || x.kind === 'income' ? x.amountCents : -x.amountCents), 0) : 0;
         const isOpen = open === b.id;
         return (
           <Card key={b.id} highlight={def === b.id}>
@@ -68,12 +70,14 @@ export default function BucketsScreen() {
               <Ring t={t} pct={pct} color={catColor(t, b.color)} />
               <View style={{ flex: 1 }}>
                 <H2>{b.name}</H2>
+                {b.inBudget ? <Text style={{ color: t.good, fontSize: 12.5, fontWeight: '700' }}>✓ Част от общия бюджет</Text> : null}
                 <Text style={[{ color: t.ink, fontSize: 24, fontWeight: '800' }, NUM]}>{eur(bal)}</Text>
                 <T muted small>{b.targetCents ? `Цел ${eur0(b.targetCents)}${b.targetDate ? ' до ' + dLabel(b.targetDate) : ''} · ` : ''}{inCyc >= 0 ? '+' : '−'}{eur0(Math.abs(inCyc))} този период</T>
               </View>
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Btn variant="primary" title="Внеси" onPress={() => nav.openSheet({ mode: 'transfer', bucketId: b.id, direction: 'to_bucket' })} />
+              {b.inBudget ? <Btn variant="primary" title="Добави приход" onPress={() => nav.openSheet({ mode: 'income', incomeTo: b.id })} /> : null}
+              <Btn variant={b.inBudget ? 'default' : 'primary'} title="Внеси" onPress={() => nav.openSheet({ mode: 'transfer', bucketId: b.id, direction: 'to_bucket' })} />
               <Btn title="Изтегли" onPress={() => nav.openSheet({ mode: 'transfer', bucketId: b.id, direction: 'from_bucket' })} />
               <Btn title="Плати от него" onPress={() => nav.openSheet({ mode: 'expense', source: b.id })} />
               <DefaultControl id={b.id} name={b.name} />
@@ -125,12 +129,13 @@ function EditFund({ b, isPool, balance, onDone }: { b: Bucket; isPool?: boolean;
   const [arm, setArm] = useState(false);
   const [err, setErr] = useState('');
   const [color, setColor] = useState(b.color);
+  const [inBudget, setInBudget] = useState(b.inBudget);
   async function save() {
     const n = name.trim(); if (!n) return setErr('Въведете име.');
     if (m.buckets.some(x => x.id !== b.id && !x.archived && x.name.toLowerCase() === n.toLowerCase())) return setErr('Вече има сметка с това име.');
     const tc = target.trim() ? Engine.parseAmountToCents(target) : null;
     if (target.trim() && !tc) return setErr('Проверете сумата за целта.');
-    await s.updateBucket(b.id, isPool ? { name: n, color } : { name: n, targetCents: tc, color });
+    await s.updateBucket(b.id, isPool ? { name: n, color } : { name: n, targetCents: tc, color, inBudget });
     toast('Промените са записани'); onDone();
   }
   async function remove() {
@@ -147,6 +152,12 @@ function EditFund({ b, isPool, balance, onDone }: { b: Bucket; isPool?: boolean;
       <Field label="Име"><Input value={name} onChangeText={setName} /></Field>
       {!isPool ? <Field label="Цел в € (по избор)"><Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="Без цел" /></Field> : null}
       <Field label="Цвят"><ColorPicker value={color} onChange={setColor} /></Field>
+      {!isPool ? (
+        <View style={{ gap: 4 }}>
+          <Check label="Част от общия бюджет" value={inBudget} onChange={setInBudget} />
+          <T muted small>За пари, които се харчат ежедневно (напр. ваучери за храна): остатъкът, дневният лимит и статистиките ги броят заедно със заплатите.</T>
+        </View>
+      ) : null}
       {err ? <T small style={{ color: t.bad }}>{err}</T> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Btn variant="primary" title="Запази" onPress={save} />

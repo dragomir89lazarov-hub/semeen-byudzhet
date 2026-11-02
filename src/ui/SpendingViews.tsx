@@ -1,11 +1,11 @@
 // "Къде отидоха парите": four ways to look at spending by category over a date range
-// (the current pay period on Today, any filter in History). Only spending from the salaries
-// fund counts: payments from savings funds don't touch the daily limit.
+// (the current pay period on Today, any filter in History). Only spending from the everyday budget
+// counts (salaries fund + budget accounts like vouchers): payments from savings don't touch the daily limit.
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { G, Line, Path, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import * as Engine from '../engine/budgetEngine';
-import { computePool, statItems, statKeyOf, today } from '../data/derive';
+import { budgetAccountIds, computePool, isBudgetSpend, statItems, statKeyOf, today } from '../data/derive';
 import type { Cycle, Model } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
 import { catColor, useTheme } from '../lib/theme';
@@ -26,7 +26,8 @@ export default function SpendingViews({ m, from, to, cycle, onCategory }: {
   const span: Span = { start: from, end: to };
   const items = statItems(m, nav.grouped);
   const spent: Record<string, number> = {};
-  for (const x of m.txs) if (x.kind === 'expense' && !x.bucketId && x.occurredOn >= from && x.occurredOn <= to) {
+  const ids = budgetAccountIds(m);
+  for (const x of m.txs) if (isBudgetSpend(m, x, ids) && x.occurredOn >= from && x.occurredOn <= to) {
     const k = statKeyOf(m, x.categoryId, nav.grouped); spent[k] = (spent[k] || 0) + x.amountCents;
   }
   const budgets = cycle?.budgets || {};
@@ -77,12 +78,13 @@ function Lines({ m, span: c, rows }: { m: Model; span: Span; rows: Row[] }) {
   const totalDays = Engine.daysInclusive(c.start, c.end);
   const lastDay = Math.max(0, Math.min(Engine.daysInclusive(c.start, today()), totalDays));
   const shown = rows.filter(r => r.v > 0);
+  const ids = budgetAccountIds(m);
   const W = 340, H = 180, L = 8, R = 8, T0 = 14, B = 24;
   const series = shown.map(r => {
     let cum = 0; const pts: number[] = [];
     for (let i = 0; i < lastDay; i++) {
       const d = Engine.addDays(c.start, i);
-      cum += m.txs.filter(x => x.kind === 'expense' && !x.bucketId && !!x.categoryId && r.ids.includes(x.categoryId) && x.occurredOn === d).reduce((a, x) => a + x.amountCents, 0);
+      cum += m.txs.filter(x => isBudgetSpend(m, x, ids) && !!x.categoryId && r.ids.includes(x.categoryId) && x.occurredOn === d).reduce((a, x) => a + x.amountCents, 0);
       pts.push(cum);
     }
     return { r, pts };
@@ -147,11 +149,12 @@ function Daily({ m, span: c, rows }: { m: Model; span: Span; rows: Row[] }) {
   const n = Math.max(0, Math.min(totalDays, Engine.daysInclusive(c.start, td < c.end ? td : c.end)));
   if (!n) return <T muted small>Избраните дати са в бъдещето.</T>;
   const dayList = Array.from({ length: n }, (_, i) => Engine.addDays(c.start, i));
+  const ids = budgetAccountIds(m);
   const owner = new Map<string, number>();                       // category id → row index
   rows.forEach((r, i) => r.ids.forEach(id => owner.set(id, i)));
   const perDay = dayList.map(d => {
     const v = rows.map(() => 0);
-    for (const x of m.txs) if (x.kind === 'expense' && !x.bucketId && x.occurredOn === d && x.categoryId) {
+    for (const x of m.txs) if (isBudgetSpend(m, x, ids) && x.occurredOn === d && x.categoryId) {
       const i = owner.get(x.categoryId); if (i !== undefined) v[i] += x.amountCents;
     }
     return v;

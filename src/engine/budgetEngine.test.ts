@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   paydayInMonth, nextPayday, proposeNextCycle, cycleClock, validateCycle,
-  computeAllowance, computeBucketAllowance, weekWithinCycle, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
+  computeAllowance, computeBucketAllowance, weekWithinCycle, mergeBudgetAccounts, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
 } from './budgetEngine.ts';
 import type { Tx } from './budgetEngine.ts';
 
@@ -140,6 +140,27 @@ test('overspending shows negative today; at midnight the limit is recomputed fro
   const day2 = computeAllowance({ cycle: c30, transactions: txs, categories, budgetLines: [], today: '2026-11-03' });
   assert.equal(day2.dailyAllowanceCents, Math.floor(140000 / 29)); // 1400 € left ÷ 29 days = 48,27 €
   assert.equal(day2.leftTodayCents, Math.floor(140000 / 29));      // a fresh day, nothing spent yet
+});
+
+test('food vouchers count as part of the everyday budget', () => {
+  // Salary 1579 € into the salaries fund, vouchers 86,78 € received into their own account,
+  // 100 € of groceries paid with vouchers, a 30 € top-up moved from the salaries to the vouchers.
+  const c30 = { id: 'c', startDate: '2026-10-29', endDate: '2026-11-28' };
+  const raw: Tx[] = [
+    { id: 's', kind: 'income', amountCents: 157900, occurredOn: '2026-10-29' },
+    { id: 'v', kind: 'income', amountCents: 8678, occurredOn: '2026-11-02', bucketId: 'vouchers' },
+    { id: 'g', kind: 'expense', amountCents: 10000, occurredOn: '2026-11-02', categoryId: 'groceries', bucketId: 'vouchers' },
+    { id: 't', kind: 'bucket_deposit', amountCents: 3000, occurredOn: '2026-11-02', bucketId: 'vouchers' },
+    { id: 'k', kind: 'bucket_deposit', amountCents: 20000, occurredOn: '2026-11-02', bucketId: 'kids' }, // real savings
+  ];
+  assert.equal(bucketBalance('vouchers', raw), 8678 - 10000 + 3000);
+  const merged = mergeBudgetAccounts(raw, new Set(['vouchers']));
+  const r = computeAllowance({ cycle: c30, transactions: merged, categories, budgetLines: [], today: '2026-11-02' });
+  assert.equal(r.incomeCents, 157900 + 8678);              // salary + vouchers
+  assert.equal(r.spentFlexibleCents, 10000);               // groceries paid with vouchers count
+  assert.equal(r.netToBucketsCents, 20000);                // only the kids' savings leaves the budget
+  assert.equal(r.remainingCents, 157900 + 8678 - 10000 - 20000);
+  assert.equal(r.spentTodayCents, 10000);
 });
 
 test('week is Monday–Sunday, clipped to the pay cycle', () => {

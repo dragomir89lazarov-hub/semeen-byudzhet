@@ -27,6 +27,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
+  const [incomeTo, setIncomeTo] = useState<string | null>(null);   // null = salaries fund
   const [bucketId, setBucketId] = useState<string | null>(null);
   const [direction, setDirection] = useState<'to_bucket' | 'from_bucket'>('to_bucket');
   const [date, setDate] = useState(today());
@@ -46,11 +47,11 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
     if (editing) {
       setMode(editing.kind === 'income' ? 'income' : editing.kind === 'expense' ? 'expense' : 'transfer');
       setAmount((editing.amountCents / 100).toFixed(2).replace('.', ','));
-      setCategoryId(editing.categoryId); setSource(editing.kind === 'expense' ? editing.bucketId : null);
+      setCategoryId(editing.categoryId); setSource(editing.kind === 'expense' ? editing.bucketId : null); setIncomeTo(editing.kind === 'income' ? editing.bucketId : null);
       setBucketId(editing.kind !== 'expense' ? editing.bucketId : null); setDirection(editing.kind === 'bucket_withdrawal' ? 'from_bucket' : 'to_bucket');
       setDate(editing.occurredOn); setPaidBy(editing.paidBy || people[0]); setNote(editing.note); baseVersion.current = editing.version;
     } else {
-      setMode(init.mode || 'expense'); setAmount('');
+      setMode(init.mode || 'expense'); setAmount(''); setIncomeTo(init.incomeTo ?? null);
       setCategoryId(lastCat && cats.some(k => k.id === lastCat) ? lastCat : cats[0]?.id || null);
       setSource(init.source !== undefined ? init.source : isPoolId(m, fid) ? null : fid);
       setBucketId(init.bucketId || (isPoolId(m, fid) ? bks[0]?.id : fid) || null);
@@ -82,7 +83,7 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
         const bal = bucketBalance(others, source);
         if (cents > bal) return setError(`„${bucketOf(m, source)?.name}“ разполага само с ${eur(bal)}.`);
       }
-    } else if (mode === 'income') { kind = 'income'; who = paidBy; }
+    } else if (mode === 'income') { kind = 'income'; who = paidBy; bucket = incomeTo; }
     else {
       if (!bucketId) return setError('Изберете сметка.');
       kind = direction === 'to_bucket' ? 'bucket_deposit' : 'bucket_withdrawal'; bucket = bucketId;
@@ -195,7 +196,13 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
             ) : mode === 'income' ? (
               <>
                 <Field label="Чий приход"><Chips>{[...people, 'Друг'].map(p => <Chip key={p} label={p} selected={paidBy === p} onPress={() => setPaidBy(p)} />)}</Chips></Field>
-                <T muted small>Приходите отиват в „{poolOf(m).name}“.</T>
+                <Field label="В сметка">
+                  <Chips>
+                    <Chip label={poolOf(m).name} selected={!incomeTo} onPress={() => setIncomeTo(null)} />
+                    {bks.map(b => <Chip key={b.id} label={b.name} selected={incomeTo === b.id} onPress={() => setIncomeTo(b.id)} />)}
+                  </Chips>
+                </Field>
+                <T muted small>Напр. ваучери за храна от работата → „В сметка: Ваучери за храна“.</T>
               </>
             ) : (
               <>

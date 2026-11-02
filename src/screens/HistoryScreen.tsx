@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { periodName } from '../engine/periods';
 import * as Engine from '../engine/budgetEngine';
 import SpendingViews from '../ui/SpendingViews';
-import { catOf, computePool, currentCycle, sortedCycles, today, txSort } from '../data/derive';
+import { budgetAccountIds, catOf, computePool, currentCycle, sortedCycles, today, txSort } from '../data/derive';
 import { useStore } from '../data/store';
 import type { Cycle, Model, Tx } from '../data/types';
 import { dLabel, eur0 } from '../lib/format';
@@ -61,9 +61,10 @@ export default function HistoryScreen() {
 
   const expenses = txs.filter(x => x.kind === 'expense');
   const spentAll = expenses.reduce((a, x) => a + x.amountCents, 0);
-  const spentFunds = expenses.filter(x => x.bucketId).reduce((a, x) => a + x.amountCents, 0);
+  const budgetIds = budgetAccountIds(m);
+  const spentFunds = expenses.filter(x => x.bucketId && !budgetIds.has(x.bucketId)).reduce((a, x) => a + x.amountCents, 0);
   const income = txs.filter(x => x.kind === 'income').reduce((a, x) => a + x.amountCents, 0);
-  const saved = txs.reduce((a, x) => a + (x.kind === 'bucket_deposit' ? x.amountCents : x.kind === 'bucket_withdrawal' ? -x.amountCents : 0), 0);
+  const saved = txs.filter(x => !x.bucketId || !budgetIds.has(x.bucketId)).reduce((a, x) => a + (x.kind === 'bucket_deposit' ? x.amountCents : x.kind === 'bucket_withdrawal' ? -x.amountCents : 0), 0);
   const cats = byCategory(m, txs, nav.grouped);
   const cycles = sortedCycles(m).filter(c => c.start <= to && c.end >= from).reverse();
   const exactCycle = cycles.find(c => c.start === from && c.end === to) || null;   // plans are shown only for a whole period
