@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   paydayInMonth, nextPayday, proposeNextCycle, cycleClock, validateCycle,
-  computeAllowance, computeBucketAllowance, weekWithinCycle, mergeBudgetAccounts, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
+  computeAllowance, computeBucketAllowance, weekWithinCycle, mergeBudgetAccounts, splitPayment, splitLines, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
 } from './budgetEngine.ts';
 import type { Tx } from './budgetEngine.ts';
 
@@ -161,6 +161,15 @@ test('food vouchers count as part of the everyday budget', () => {
   assert.equal(r.netToBucketsCents, 20000);                // only the kids' savings leaves the budget
   assert.equal(r.remainingCents, 157900 + 8678 - 10000 - 20000);
   assert.equal(r.spentTodayCents, 10000);
+});
+
+test('paying more than the account holds takes the rest from the salaries fund', () => {
+  assert.deepEqual(splitPayment(15000, 8200), { fromAccount: 8200, fromPool: 6800 });
+  assert.deepEqual(splitPayment(5000, 8200), { fromAccount: 5000, fromPool: 0 });
+  assert.deepEqual(splitPayment(5000, 0), { fromAccount: 0, fromPool: 5000 });
+  assert.deepEqual(splitPayment(5000, -300), { fromAccount: 0, fromPool: 5000 });
+  const r = splitLines([{ amountCents: 3000 }, { amountCents: 4000 }, { amountCents: 2000 }], 5000);
+  assert.deepEqual(r.map(x => [x.fromAccount, x.fromPool]), [[3000, 0], [2000, 2000], [0, 2000]]);
 });
 
 test('week is Monday–Sunday, clipped to the pay cycle', () => {

@@ -52,10 +52,6 @@ export default function ReceiptReview({ receipt, onClose }: { receipt: Receipt |
     if (!kept.length) return setError('Няма останали редове за записване.');
     if (parsed.some(l => !l.cents)) return setError('Проверете сумите: всяка трябва да е число, например 2,49.');
     if (parsed.some(l => !l.categoryId && !l.newCategory)) return setError('Изберете категория за всеки ред.');
-    if (source) {
-      const bal = bucketBalance(m, source);
-      if (total > bal) return setError(`„${bucketOf(m, source)?.name}“ разполага само с ${eur(bal)}.`);
-    }
     setBusy(true);
     // create the new categories the user kept, then map lines to real ids
     const ids = new Map<string, string>();
@@ -67,17 +63,14 @@ export default function ReceiptReview({ receipt, onClose }: { receipt: Receipt |
     const ready = parsed.map(l => ({ key: l.key, name: l.name, amountCents: l.cents!, categoryId: l.categoryId || ids.get(l.newCategory!)!, newCategory: null }));
     const prefix = store.trim();
     let count = 0;
-    if (group) {
-      for (const g of groupByCategory(ready)) {
-        const note = `${prefix ? prefix + ': ' : ''}${g.names.join(', ')}`.slice(0, 200);
-        await s.saveTx({ kind: 'expense', amountCents: g.amountCents, occurredOn: date, categoryId: g.categoryKey, bucketId: source, paidBy, note });
-        count++;
-      }
-    } else {
-      for (const l of ready) {
-        await s.saveTx({ kind: 'expense', amountCents: l.amountCents, occurredOn: date, categoryId: l.categoryId, bucketId: source, paidBy, note: `${prefix ? prefix + ' · ' : ''}${l.name}`.slice(0, 200) });
-        count++;
-      }
+    const items = group
+      ? groupByCategory(ready).map(g => ({ amountCents: g.amountCents, categoryId: g.categoryKey, note: `${prefix ? prefix + ': ' : ''}${g.names.join(', ')}`.slice(0, 200) }))
+      : ready.map(l => ({ amountCents: l.amountCents, categoryId: l.categoryId, note: `${prefix ? prefix + ' · ' : ''}${l.name}`.slice(0, 200) }));
+    // from an account: use what's in it line by line, the rest comes from the salaries fund
+    const parts = source ? Engine.splitLines(items, bucketBalance(m, source)) : items.map(line => ({ line, fromAccount: 0, fromPool: line.amountCents }));
+    for (const p of parts) {
+      if (p.fromAccount) { await s.saveTx({ kind: 'expense', amountCents: p.fromAccount, occurredOn: date, categoryId: p.line.categoryId, bucketId: source, paidBy, note: p.line.note }); count++; }
+      if (p.fromPool) { await s.saveTx({ kind: 'expense', amountCents: p.fromPool, occurredOn: date, categoryId: p.line.categoryId, bucketId: null, paidBy, note: p.line.note }); count++; }
     }
     setBusy(false);
     onClose();
@@ -148,6 +141,11 @@ export default function ReceiptReview({ receipt, onClose }: { receipt: Receipt |
                 {bks.map(b => <Chip key={b.id} label={b.name} selected={source === b.id} onPress={() => setSource(b.id)} />)}
               </Chips>
             </Field>
+            {source && total > bucketBalance(m, source) ? (
+              <T small style={{ color: t.warn }}>{bucketBalance(m, source) > 0
+                ? `В „${bucketOf(m, source)?.name}“ има ${eur(bucketBalance(m, source))}: ще се вземат те, а останалите ${eur(total - bucketBalance(m, source))} — от „${poolOf(m).name}“.`
+                : `В „${bucketOf(m, source)?.name}“ няма пари: всичко ще е от „${poolOf(m).name}“.`}</T>
+            ) : null}
             <Field label="Платил"><Chips>{people.map(p => <Chip key={p} label={p} selected={paidBy === p} onPress={() => setPaidBy(p)} />)}</Chips></Field>
             <Check label="Обедини по категории (един разход на категория)" value={group} onChange={setGroup} />
 

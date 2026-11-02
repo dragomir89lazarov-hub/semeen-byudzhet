@@ -79,10 +79,6 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
     if (mode === 'expense') {
       if (!categoryId) return setError('Изберете вид разход.');
       cat = categoryId; bucket = source; who = paidBy;
-      if (source && !force) {
-        const bal = bucketBalance(others, source);
-        if (cents > bal) return setError(`„${bucketOf(m, source)?.name}“ разполага само с ${eur(bal)}.`);
-      }
     } else if (mode === 'income') { kind = 'income'; who = paidBy; bucket = incomeTo; }
     else {
       if (!bucketId) return setError('Изберете сметка.');
@@ -92,15 +88,26 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
         if (cents > bal) return setError(`„${bucketOf(m, bucketId)?.name}“ разполага само с ${eur(bal)}.`);
       }
     }
+    // Paying from an account with too little in it: take what's there, the rest from the salaries fund.
+    const split = mode === 'expense' && bucket ? Engine.splitPayment(cents, bucketBalance(others, bucket)) : null;
+    const mainAmount = split ? (split.fromAccount || cents) : cents;
+    const mainBucket = split && !split.fromAccount ? null : bucket;
     setBusy(true);
-    const r = await s.saveTx({ id: editing?.id, kind, amountCents: cents, occurredOn: date, categoryId: cat, bucketId: bucket, paidBy: who, note: note.trim() },
+    const r = await s.saveTx({ id: editing?.id, kind, amountCents: mainAmount, occurredOn: date, categoryId: cat, bucketId: mainBucket, paidBy: who, note: note.trim() },
       editing ? { version: baseVersion.current ?? editing.version, force } : undefined);
+    if (!('conflict' in r) && !('error' in r) && split && split.fromAccount && split.fromPool) {
+      await s.saveTx({ kind: 'expense', amountCents: split.fromPool, occurredOn: date, categoryId: cat, bucketId: null, paidBy: who, note: note.trim() });
+    }
     setBusy(false);
     if ('conflict' in r) { setConflict(r.conflict); return; }
     if ('error' in r) { setError(r.error); return; }
     if (mode === 'expense') lastCat = cat;
     lastPayer = who;
-    onClose(); toast(editing ? 'Промените са записани' : 'Записано');
+    onClose();
+    const acc = bucket ? bucketOf(m, bucket)?.name : '';
+    toast(split && split.fromPool
+      ? (split.fromAccount ? `Записано: ${eur(split.fromAccount)} от „${acc}“ + ${eur(split.fromPool)} от „${poolOf(m).name}“` : `В „${acc}“ няма пари: целият разход е от „${poolOf(m).name}“`)
+      : editing ? 'Промените са записани' : 'Записано');
   }
   async function scan(source: 'camera' | 'gallery') {
     setError('');
@@ -191,6 +198,16 @@ export default function QuickAddSheet({ init, onClose, onReceipt }: { init: Shee
                     {bks.map(b => <Chip key={b.id} label={b.name} selected={source === b.id} onPress={() => setSource(b.id)} />)}
                   </Chips>
                 </Field>
+                {(() => {
+                  const cents = Engine.parseAmountToCents(amount);
+                  if (!source || !cents) return null;
+                  const bal = bucketBalance({ ...m, txs: m.txs.filter(x => x.id !== editing?.id) }, source);
+                  if (cents <= bal) return null;
+                  const p = Engine.splitPayment(cents, bal);
+                  return <T small style={{ color: t.warn }}>{p.fromAccount
+                    ? `В „${bucketOf(m, source)?.name}“ има ${eur(bal)}: ще се вземат те, а останалите ${eur(p.fromPool)} — от „${poolOf(m).name}“ (два записа).`
+                    : `В „${bucketOf(m, source)?.name}“ няма пари: целият разход ще е от „${poolOf(m).name}“.`}</T>;
+                })()}
                 <Field label="Платил"><Chips>{people.map(p => <Chip key={p} label={p} selected={paidBy === p} onPress={() => setPaidBy(p)} />)}</Chips></Field>
               </>
             ) : mode === 'income' ? (

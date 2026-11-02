@@ -358,6 +358,21 @@ export function mergeBudgetAccounts(txs: Tx[], budgetAccountIds: Set<string>): T
   return out;
 }
 
+/**
+ * Paying more than an account holds: take everything that's in the account and the rest
+ * from the salaries fund. Example: 82 € in vouchers, 150 € purchase → 82 € + 68 €.
+ */
+export function splitPayment(amountCents: number, availableCents: number): { fromAccount: number; fromPool: number } {
+  const fromAccount = Math.max(0, Math.min(amountCents, availableCents));
+  return { fromAccount, fromPool: amountCents - fromAccount };
+}
+
+/** Spread several amounts over an account's balance in order (receipts): each line is split where the money runs out. */
+export function splitLines<T extends { amountCents: number }>(lines: T[], availableCents: number): { line: T; fromAccount: number; fromPool: number }[] {
+  let left = Math.max(0, availableCents);
+  return lines.map(line => { const p = splitPayment(line.amountCents, left); left -= p.fromAccount; return { line, ...p }; });
+}
+
 export function bucketBalance(bucketId: string, txs: Tx[]): number {
   return sum(txs.filter(t => !t.deletedAt && t.bucketId === bucketId).map(t =>
     t.kind === 'bucket_deposit' || t.kind === 'income' ? t.amountCents : -t.amountCents));
