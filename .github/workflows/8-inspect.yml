@@ -1,0 +1,32 @@
+# Runs a READ-ONLY query from supabase/queries/ and prints the rows as notices (to check calculations).
+name: "8 · Преглед на данни"
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: "SQL файл (само четене)"
+        required: true
+        default: "supabase/queries/accounts-overview.sql"
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the PostgreSQL client
+        run: which psql || (sudo apt-get update -q && sudo apt-get install -y -q postgresql-client)
+      - name: Run
+        env:
+          DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          Q: ${{ inputs.query }}
+        run: |
+          case "$Q" in supabase/queries/*.sql) ;; *) echo "::error::Only files in supabase/queries/ can be run."; exit 1;; esac
+          REF=$(node -e "const s=require('fs').readFileSync('src/config.ts','utf8');console.log(s.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)[1])")
+          export PGPASSWORD="$DB_PASSWORD" PGUSER="postgres.$REF" PGDATABASE=postgres PGPORT=5432 PGCONNECT_TIMEOUT=6
+          for REGION in eu-central-1 eu-central-2 eu-west-1 eu-west-2 eu-west-3 eu-north-1 us-east-1 us-east-2 us-west-1 ap-southeast-1; do
+            for P in aws-0 aws-1; do H="$P-$REGION.pooler.supabase.com"; if PGHOST=$H psql -tAc "select 1" >/dev/null 2>&1; then export PGHOST=$H; break 2; fi; done
+          done
+          [ -n "$PGHOST" ] || { echo "::error::database not found"; exit 1; }
+          # read-only transaction: the query cannot change anything
+          psql -v ON_ERROR_STOP=1 -tA -F ' | ' -c "set default_transaction_read_only = on;" -f "$Q" > /tmp/out.txt 2>&1 || { echo "::error::$(tail -c 600 /tmp/out.txt | tr '\n' ' ')"; exit 1; }
+          split -l 25 /tmp/out.txt /tmp/part_
+          for f in /tmp/part_*; do echo "::notice title=$(basename $f)::$(cat $f | tr '\n' '¶' | cut -c1-3800)"; done
