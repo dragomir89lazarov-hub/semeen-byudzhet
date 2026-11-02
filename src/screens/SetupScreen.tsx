@@ -1,4 +1,3 @@
-import * as Updates from 'expo-updates';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import * as Engine from '../engine/budgetEngine';
@@ -9,6 +8,7 @@ import { catColor, useTheme } from '../lib/theme';
 import DateButton from '../ui/DateButton';
 import CategoryManager from './CategoryManager';
 import BackupsCard from './BackupsCard';
+import UpdateCard from './UpdateCard';
 import { Btn, Card, Check, Chip, Field, H2, Input, Screen, T, useToast } from '../ui/kit';
 
 const centsText = (c: number | undefined) => (c ? (c / 100).toFixed(2).replace('.', ',') : '');
@@ -30,7 +30,6 @@ export default function SetupScreen() {
   const [resetText, setResetText] = useState(''); const [resetting, setResetting] = useState(false);
   const [newBucket, setNewBucket] = useState(''); const [newTarget, setNewTarget] = useState('');
   const [people, setPeople] = useState(m.settings.people);
-  const [updateMsg, setUpdateMsg] = useState('');
 
   useEffect(() => { setStart(c?.start || ''); setEnd(c?.end || ''); }, [c?.id, c?.start, c?.end]);
   useEffect(() => { if (c) setPlan(Object.fromEntries(cats.map(k => [k.id, centsText(c.budgets[k.id])]))); }, [c?.id, JSON.stringify(c?.budgets), cats.length]);
@@ -63,19 +62,10 @@ export default function SetupScreen() {
     }
     await s.saveBudgets(c.id, out); toast('Планът е записан');
   }
-  async function checkUpdates() {
-    try {
-      setUpdateMsg('Проверка…');
-      const r = await Updates.checkForUpdateAsync();
-      if (!r.isAvailable) return setUpdateMsg('Приложението е с последната версия.');
-      setUpdateMsg('Изтегляне на новата версия…');
-      await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
-    } catch { setUpdateMsg('Проверката не е възможна в момента.'); }
-  }
-
   return (
     <Screen>
+      <UpdateCard />
+
       {s.pending ? <Card style={{ backgroundColor: t.warnSoft }}><T style={{ color: t.warn }}>{s.pending} промени чакат връзка с интернет и ще се изпратят автоматично.</T></Card> : null}
 
       <Card>
@@ -172,10 +162,7 @@ export default function SetupScreen() {
       </Card>
 
       <Card>
-        <H2>Приложение</H2>
-        <Btn title="Провери за обновления" onPress={checkUpdates} style={{ alignSelf: 'flex-start' }} />
-        {updateMsg ? <T muted small>{updateMsg}</T> : null}
-        <T muted small>Версия {Updates.runtimeVersion || '—'}{Updates.updateId ? ` · ${Updates.updateId.slice(0, 8)}` : ''}</T>
+        <H2>Профил</H2>
         <Btn variant="danger" title="Изход от профила" onPress={() => s.signOut()} style={{ alignSelf: 'flex-start' }} />
       </Card>
 
