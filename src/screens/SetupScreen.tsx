@@ -64,8 +64,6 @@ export default function SetupScreen() {
   }
   return (
     <Screen>
-      <UpdateCard />
-
       {s.pending ? <Card style={{ backgroundColor: t.warnSoft }}><T style={{ color: t.warn }}>{s.pending} промени чакат връзка с интернет и ще се изпратят автоматично.</T></Card> : null}
 
       <Card>
@@ -179,6 +177,8 @@ export default function SetupScreen() {
           toast(ok ? 'Всички данни са изчистени' : 'Изчистването не успя. Проверете връзката.');
         }} />
       </Card>
+
+      <UpdateCard />
     </Screen>
   );
 }
