@@ -100,6 +100,13 @@ export function nextPayday(after: ISODate, rule: Extract<PaydayRule, { type: 'mo
   throw new Error('unreachable: no payday found within 3 months');
 }
 
+/** Next payday from the rule in Settings: today counts (0 days) if today is payday. Null for a manual rule. */
+export function nextPaydayFrom(today: ISODate, rule: PaydayRule): { date: ISODate; days: number } | null {
+  if (rule.type !== 'monthly_day') return null;
+  const date = nextPayday(addDays(today, -1), rule);
+  return { date, days: daysInclusive(today, date) - 1 };
+}
+
 /**
  * Propose the next cycle: it starts the day after the previous one ends and runs
  * until the day before the next payday. With a manual rule, fall back to the

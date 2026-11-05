@@ -37,6 +37,21 @@ function Metrics({ vals }: { vals: Record<Metric, number> }) {
   );
 }
 
+/** "До заплата: 20 дни · ср, 25 ноем." from the payday rule in Settings. */
+function PaydayLine() {
+  const t = useTheme(); const { model: m } = useStore();
+  const p = Engine.nextPaydayFrom(today(), m.settings.payday);
+  if (!p) return null;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, backgroundColor: t.accentSoft, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 10, alignSelf: 'flex-start' }}>
+      <Text style={{ color: t.accent, fontWeight: '800', fontSize: 14.5 }}>
+        {p.days === 0 ? 'Заплата е днес!' : p.days === 1 ? 'До заплата: 1 ден' : `До заплата: ${p.days} дни`}
+      </Text>
+      {p.days > 0 ? <Text style={{ color: t.ink2, fontSize: 13.5 }}>· {dwLabel(p.date)}</Text> : null}
+    </View>
+  );
+}
+
 function BigNumber({ value, label, explain, bad }: { value: number; label: string; explain: string; bad?: boolean }) {
   const t = useTheme();
   return (
@@ -107,6 +122,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
     <Screen>
       <Card style={{ borderRadius: 18, gap: 12 }}>
         <Row><Label>★ {[pool.name, ...m.buckets.filter(b => b.inBudget && !b.archived && b.kind !== 'pool').map(b => b.name)].join(' + ')}</Label><Pill status={r.status} text={STATUS_TEXT[r.status]} /></Row>
+        <PaydayLine />
         <BigNumber value={vals[nav.metric]} label={METRIC_LABEL[nav.metric]} explain={explain} bad={vals[nav.metric] < 0 || r.status === 'overdrawn' || r.status === 'overspending'} />
         <Metrics vals={vals} />
         {r.leftTodayCents < 0 ? (
@@ -114,7 +130,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
             <T small style={{ color: t.bad }}>Днешният лимит е превишен с {eur(-r.leftTodayCents)}. В полунощ лимитът се изчислява наново от реалния остатък, разделен на оставащите дни, така че разходът се разпределя по целия период.</T>
           </View>
         ) : null}
-        <T>{msg} <Text style={{ color: t.ink2 }}>Заплата: {dwLabel(Engine.addDays(c.end, 1))}</Text></T>
+        <T>{msg}</T>
         <View style={{ gap: 8 }}>
           <View style={{ gap: 4 }}><T muted small>Изминало време: {Math.round(timePct)}%</T><Track t={t} pct={timePct} color={t.ink2} /></View>
           <View style={{ gap: 4 }}><T muted small>Използван бюджет: {Math.round(usedPct)}%</T><Track t={t} pct={usedPct} color={usedPct > timePct + 5 ? t.bad : t.accent} /></View>
@@ -162,6 +178,7 @@ function FundToday({ m, c, b }: { m: Model; c: Cycle; b: Bucket }) {
     <Screen>
       <Card style={{ borderRadius: 18, gap: 12 }}>
         <Row><Label>★ {b.name}</Label>{clock.phase === 'ended' ? <Pill status="tight" text="Периодът приключи" /> : null}</Row>
+        <PaydayLine />
         <BigNumber value={vals[nav.metric]} label={METRIC_LABEL[nav.metric]} explain={explain} bad={vals[nav.metric] < 0} />
         <Metrics vals={vals} />
         <T>Плащанията от тази сметка не намаляват общия бюджет.{b.targetCents ? ` Цел ${eur0(b.targetCents)} (${Math.max(0, Math.round((f.balanceCents / b.targetCents) * 100))}%).` : ''}</T>

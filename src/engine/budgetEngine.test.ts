@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   paydayInMonth, nextPayday, proposeNextCycle, cycleClock, validateCycle,
-  computeAllowance, computeBucketAllowance, weekWithinCycle, mergeBudgetAccounts, splitPayment, splitLines, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
+  computeAllowance, computeBucketAllowance, weekWithinCycle, mergeBudgetAccounts, nextPaydayFrom, splitPayment, splitLines, velocitySeries, bucketBalance, parseAmountToCents, todayIn,
 } from './budgetEngine.ts';
 import type { Tx } from './budgetEngine.ts';
 
@@ -170,6 +170,15 @@ test('paying more than the account holds takes the rest from the salaries fund',
   assert.deepEqual(splitPayment(5000, -300), { fromAccount: 0, fromPool: 5000 });
   const r = splitLines([{ amountCents: 3000 }, { amountCents: 4000 }, { amountCents: 2000 }], 5000);
   assert.deepEqual(r.map(x => [x.fromAccount, x.fromPool]), [[3000, 0], [2000, 2000], [0, 2000]]);
+});
+
+test('days until payday follow the rule in Settings', () => {
+  const r = { type: 'monthly_day' as const, day: 25, weekend: 'previous_business_day' as const };
+  assert.deepEqual(nextPaydayFrom('2026-11-05', r), { date: '2026-11-25', days: 20 });
+  assert.deepEqual(nextPaydayFrom('2026-11-25', r), { date: '2026-11-25', days: 0 });   // payday is today
+  assert.deepEqual(nextPaydayFrom('2026-11-26', r), { date: '2026-12-25', days: 29 });
+  assert.deepEqual(nextPaydayFrom('2026-10-20', r), { date: '2026-10-23', days: 3 });   // 25 Oct is Sunday → Fri 23
+  assert.equal(nextPaydayFrom('2026-11-05', { type: 'manual' }), null);
 });
 
 test('week is Monday–Sunday, clipped to the pay cycle', () => {
