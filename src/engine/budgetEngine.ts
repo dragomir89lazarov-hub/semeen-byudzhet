@@ -46,11 +46,24 @@ export function weekWithinCycle(d: ISODate, cycle: { startDate: ISODate; endDate
   };
 }
 
-/** Share of `remainingAtWeekStart` that belongs to this week: an even split over the days left at the week's start. */
-function weekShare(remainingAtWeekStart: number, week: { start: ISODate; end: ISODate }, cycleEnd: ISODate): number {
-  const daysLeftAtWeekStart = daysInclusive(week.start, cycleEnd);
-  if (daysLeftAtWeekStart <= 0) return 0;
-  return Math.floor((Math.max(0, remainingAtWeekStart) * daysInclusive(week.start, week.end)) / daysLeftAtWeekStart);
+/**
+ * Week, as agreed with the user (5 Nov 2026): what's left for today ("За днес", may be negative)
+ * plus "На ден" for each remaining day of the week after today. Earlier days of the week don't
+ * count separately: what they spent is already out of the remaining money behind both numbers.
+ * Before the cycle starts: "На ден" × the days of its first week. After it ends: 0.
+ */
+function weekNumbers(a: {
+  phase: CycleClock['phase']; today: ISODate; week: { start: ISODate; end: ISODate };
+  dailyAllowance: number; spentToday: number; perDay: number;
+}): { restDays: number; allowance: number; left: number } {
+  if (a.phase === 'ended') return { restDays: 0, allowance: 0, left: 0 };
+  if (a.phase === 'upcoming') {
+    const days = daysInclusive(a.week.start, a.week.end);
+    return { restDays: days, allowance: a.perDay * days, left: a.perDay * days };
+  }
+  const restDays = Math.max(0, toDayNumber(a.week.end) - toDayNumber(a.today));
+  const allowance = a.dailyAllowance + a.perDay * restDays;
+  return { restDays, allowance, left: allowance - a.spentToday };
 }
 
 /** "Today" as an ISO date in a given IANA time zone (e.g. Europe/Sofia). */
@@ -196,9 +209,10 @@ export interface AllowanceResult {
   averageDailyRemainingCents: number; // remaining now ÷ days left (today included)
   weekStart: ISODate;            // Monday of this week (or the cycle start, if later)
   weekEnd: ISODate;              // Sunday of this week (or the cycle end, if earlier)
-  weekAllowanceCents: number;    // this week's even share, fixed as of Monday
-  spentThisWeekCents: number;    // flexible spending since the week started
-  leftThisWeekCents: number;     // week allowance minus what was spent this week
+  weekRestDays: number;          // days of this week after today (Fri–Sun on a Thursday = 3)
+  weekAllowanceCents: number;    // today's limit + "На ден" × weekRestDays
+  spentThisWeekCents: number;    // flexible spending since Monday (shown for information)
+  leftThisWeekCents: number;     // "За днес" + "На ден" × weekRestDays
   paceCentsPerDay: number;       // projected flexible spend per day
   projectedEndBalanceCents: number;
   runOutDate: ISODate | null;    // when money hits zero at current pace, if before cycle end
@@ -256,13 +270,13 @@ export function computeAllowance(input: AllowanceInput): AllowanceResult {
   const dailyAllowance = daysLeft > 0 ? Math.floor(Math.max(0, remainingAtStartOfToday) / daysLeft) : 0;
   const leftToday = dailyAllowance - spentToday;
 
-  // Week: like the daily allowance, fixed as of the start of the week (Monday), so a big
-  // purchase on Tuesday lowers what's left this week instead of re-spreading it.
+  // Week: today's remainder + "На ден" × the days after today through Sunday (see weekNumbers).
   const activeDay = clock.phase === 'active' ? today : clock.phase === 'upcoming' ? cycle.startDate : cycle.endDate;
   const week = weekWithinCycle(activeDay, cycle);
   const ws = toDayNumber(week.start), we = toDayNumber(activeDay);
   const spentThisWeek = sum(flexible.filter(t => { const n = toDayNumber(t.occurredOn); return n >= ws && n <= we; }).map(t => t.amountCents));
-  const weekAllowance = clock.phase === 'ended' ? 0 : weekShare(remaining + spentThisWeek, week, cycle.endDate);
+  const perDay = daysLeft > 0 ? Math.floor(Math.max(0, remaining) / daysLeft) : 0;
+  const wk = weekNumbers({ phase: clock.phase, today, week, dailyAllowance, spentToday: clock.phase === 'active' ? spentToday : 0, perDay });
 
   // Pace: blend whole-cycle average with the last 7 days so a recent splurge shows up fast,
   // using only completed days (today is partial and would understate the rate).
@@ -311,12 +325,13 @@ export function computeAllowance(input: AllowanceInput): AllowanceResult {
     dailyAllowanceCents: dailyAllowance,
     spentTodayCents: spentToday,
     leftTodayCents: leftToday,
-    averageDailyRemainingCents: daysLeft > 0 ? Math.floor(Math.max(0, remaining) / daysLeft) : 0,
+    averageDailyRemainingCents: perDay,
     weekStart: week.start,
     weekEnd: week.end,
-    weekAllowanceCents: weekAllowance,
+    weekRestDays: wk.restDays,
+    weekAllowanceCents: wk.allowance,
     spentThisWeekCents: spentThisWeek,
-    leftThisWeekCents: weekAllowance - spentThisWeek,
+    leftThisWeekCents: wk.left,
     paceCentsPerDay: Math.round(pace),
     projectedEndBalanceCents: projectedEnd,
     runOutDate,
@@ -394,9 +409,10 @@ export interface FundAllowanceResult {
   averageDailyRemainingCents: number; // balance now ÷ days left
   weekStart: ISODate;
   weekEnd: ISODate;
-  weekAllowanceCents: number;         // this week's share of the fund, fixed as of Monday
-  spentThisWeekCents: number;         // paid from this fund since the week started
-  leftThisWeekCents: number;
+  weekRestDays: number;               // days of this week after today
+  weekAllowanceCents: number;         // today's share + "На ден" × weekRestDays
+  spentThisWeekCents: number;         // paid from this fund since Monday (information)
+  leftThisWeekCents: number;          // "За днес" + "На ден" × weekRestDays
 }
 
 /**
@@ -421,19 +437,21 @@ export function computeBucketAllowance(args: {
   const ws = toDayNumber(week.start), we = toDayNumber(activeDay);
   const spentThisWeek = sum(live.filter(t => t.bucketId === args.bucketId && t.kind === 'expense' &&
     toDayNumber(t.occurredOn) >= ws && toDayNumber(t.occurredOn) <= we).map(t => t.amountCents));
-  const weekAllowance = clock.phase === 'ended' ? 0 : weekShare(balance + spentThisWeek, week, args.cycle.endDate);
+  const perDay = daysLeft > 0 ? Math.floor(Math.max(0, balance) / daysLeft) : 0;
+  const wk = weekNumbers({ phase: clock.phase, today: args.today, week, dailyAllowance: daily, spentToday: clock.phase === 'active' ? spentToday : 0, perDay });
   return {
     weekStart: week.start,
     weekEnd: week.end,
-    weekAllowanceCents: weekAllowance,
+    weekRestDays: wk.restDays,
+    weekAllowanceCents: wk.allowance,
     spentThisWeekCents: spentThisWeek,
-    leftThisWeekCents: weekAllowance - spentThisWeek,
+    leftThisWeekCents: wk.left,
     balanceCents: balance,
     daysLeft,
     dailyAllowanceCents: daily,
     spentTodayCents: spentToday,
     leftTodayCents: daily - spentToday,
-    averageDailyRemainingCents: daysLeft > 0 ? Math.floor(Math.max(0, balance) / daysLeft) : 0,
+    averageDailyRemainingCents: perDay,
   };
 }
 

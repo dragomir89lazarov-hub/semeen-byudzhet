@@ -78,9 +78,10 @@ test('allowance: reserves unpaid fixed bills and excludes bucket spending', () =
   assert.equal(r.weekStart, '2026-10-26');
   assert.equal(r.weekEnd, '2026-11-01');
   assert.equal(r.spentThisWeekCents, 6500);
-  // at Monday: 217500 + 6500 = 224000 over 30 days left (26 Oct – 24 Nov) → 7 days' share
-  assert.equal(r.weekAllowanceCents, Math.floor(224000 * 7 / 30)); // 52266
-  assert.equal(r.leftThisWeekCents, 52266 - 6500);
+  // Thu 29 Oct: "За днес" 5648 + "На ден" 8055 × 3 days (Fri–Sun)
+  assert.equal(r.weekRestDays, 3);
+  assert.equal(r.weekAllowanceCents, 8148 + 3 * 8055);
+  assert.equal(r.leftThisWeekCents, 5648 + 3 * 8055);
   assert.equal(r.status, 'on_track');
   // Kids' Fund as the default fund: 50000 in, 9999 paid on the 27th → 40001 over 27 days
   const k = computeBucketAllowance({ bucketId: 'kids', transactions: txs, cycle, today: '2026-10-29' });
@@ -197,8 +198,34 @@ test('fund week share', () => {
       { id: 'e', kind: 'expense', amountCents: 2000, occurredOn: '2026-10-27', categoryId: 'kids', bucketId: 'kids' },
     ] });
   assert.equal(k.spentThisWeekCents, 2000);
-  assert.equal(k.weekAllowanceCents, Math.floor(30000 * 7 / 30)); // 7000
-  assert.equal(k.leftThisWeekCents, 5000);
+  // 28000 left over 27 days (29 Oct – 24 Nov): today's share 1037 + 3 × 1037 (Fri–Sun)
+  assert.equal(k.weekRestDays, 3);
+  assert.equal(k.leftThisWeekCents, 4 * Math.floor(28000 / 27));
+});
+
+test('week = За днес + На ден × days left in the week (real data, Thu 5 Nov 2026)', () => {
+  const cycle = { id: 'c', startDate: '2026-10-29', endDate: '2026-11-27' };
+  // 1237,53 € left this morning; 49,29 € spent today → 1188,24 € left, 23 days incl. today
+  const txs: Tx[] = [
+    { id: 'i', kind: 'income', amountCents: 166578, occurredOn: '2026-10-29' },
+    { id: 'a', kind: 'expense', amountCents: 166578 - 123753, occurredOn: '2026-11-03', categoryId: 'food' },
+    { id: 'b', kind: 'expense', amountCents: 4929, occurredOn: '2026-11-05', categoryId: 'food' },
+  ];
+  const r = computeAllowance({ cycle, transactions: txs, categories: [], budgetLines: [], today: '2026-11-05' });
+  assert.equal(r.remainingCents, 118824);
+  assert.equal(r.averageDailyRemainingCents, 5166);              // 51,66 € на ден
+  assert.equal(r.leftTodayCents, Math.floor(123753 / 23) - 4929); // 53,80 − 49,29 = 4,51 €
+  assert.equal(r.weekRestDays, 3);                                // Fri, Sat, Sun
+  assert.equal(r.leftThisWeekCents, 451 + 3 * 5166);             // 159,49 €
+  // overspent today → the excess comes off the week
+  const over = computeAllowance({ cycle, today: '2026-11-05', categories: [], budgetLines: [],
+    transactions: [...txs, { id: 'c', kind: 'expense', amountCents: 10000, occurredOn: '2026-11-05', categoryId: 'food' }] });
+  assert.equal(over.leftTodayCents, 451 - 10000);
+  assert.equal(over.leftThisWeekCents, over.leftTodayCents + 3 * over.averageDailyRemainingCents);
+  // Sunday: only today is left in the week
+  const sun = computeAllowance({ cycle, transactions: txs, categories: [], budgetLines: [], today: '2026-11-08' });
+  assert.equal(sun.weekRestDays, 0);
+  assert.equal(sun.leftThisWeekCents, sun.leftTodayCents);
 });
 
 test('amount parsing', () => {

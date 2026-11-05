@@ -111,7 +111,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
   const vals = { today: r.leftTodayCents, week: r.leftThisWeekCents, period: r.remainingCents, avg: r.averageDailyRemainingCents };
   const explain = {
     today: `Дневен лимит ${eur(r.dailyAllowanceCents)} (остатъкът в полунощ ÷ ${days(r.daysLeft)}) − похарчено днес ${eur(r.spentTodayCents)}`,
-    week: `Лимит за ${dLabel(r.weekStart)} – ${dLabel(r.weekEnd)}: ${eur(r.weekAllowanceCents)} − похарчено тази седмица ${eur(r.spentThisWeekCents)}`,
+    week: weekExplain(r, clock.phase, 'похарчено'),
     period: `За оставащите ${days(r.daysLeft)}, до ${dwLabel(c.end)} включително`,
     avg: `${eur(r.remainingCents)} ÷ ${days(r.daysLeft)} до края на периода`,
   }[nav.metric];
@@ -158,6 +158,16 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
   );
 }
 
+// "Седмица" = "За днес" + "На ден" × the days after today through Sunday (engine: weekNumbers).
+function weekExplain(w: { leftTodayCents: number; averageDailyRemainingCents: number; weekRestDays: number; weekEnd: string; spentThisWeekCents: number },
+  phase: Engine.CycleClock['phase'], verb: string): string {
+  const spent = ` · ${verb} от понеделник: ${eur(w.spentThisWeekCents)}`;
+  if (phase === 'ended') return 'Периодът е приключил.';
+  if (phase === 'upcoming') return `${days(w.weekRestDays)} × ${eur(w.averageDailyRemainingCents)} на ден`;
+  if (!w.weekRestDays) return `Днес е последният ден от седмицата, затова е равно на „За днес“${spent}`;
+  return `За днес ${eur(w.leftTodayCents)} + ${days(w.weekRestDays)} до ${dwLabel(w.weekEnd)} × ${eur(w.averageDailyRemainingCents)} на ден${spent}`;
+}
+
 function FundToday({ m, c, b }: { m: Model; c: Cycle; b: Bucket }) {
   const nav = useNav();
   const f = computeFund(m, b.id, c);
@@ -165,7 +175,7 @@ function FundToday({ m, c, b }: { m: Model; c: Cycle; b: Bucket }) {
   const vals = { today: f.leftTodayCents, week: f.leftThisWeekCents, period: f.balanceCents, avg: f.averageDailyRemainingCents };
   const explain = {
     today: `Дневен лимит ${eur(f.dailyAllowanceCents)} (наличността в полунощ ÷ ${days(f.daysLeft)}) − платено днес ${eur(f.spentTodayCents)}`,
-    week: `Лимит за ${dLabel(f.weekStart)} – ${dLabel(f.weekEnd)}: ${eur(f.weekAllowanceCents)} − платено тази седмица ${eur(f.spentThisWeekCents)}`,
+    week: weekExplain(f, clock.phase, 'платено'),
     period: `Наличност в сметката за оставащите ${days(f.daysLeft)}, до ${dwLabel(c.end)} включително`,
     avg: `${eur(f.balanceCents)} ÷ ${days(f.daysLeft)} до края на периода`,
   }[nav.metric];
