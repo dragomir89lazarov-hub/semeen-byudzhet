@@ -123,7 +123,7 @@ function PoolToday({ m, c }: { m: Model; c: Cycle }) {
       <Card style={{ borderRadius: 18, gap: 12 }}>
         <Row><Label>★ {[pool.name, ...m.buckets.filter(b => b.inBudget && !b.archived && b.kind !== 'pool').map(b => b.name)].join(' + ')}</Label><Pill status={r.status} text={STATUS_TEXT[r.status]} /></Row>
         <PaydayLine />
-        <BigNumber value={vals[nav.metric]} label={METRIC_LABEL[nav.metric]} explain={explain} bad={vals[nav.metric] < 0 || r.status === 'overdrawn' || r.status === 'overspending'} />
+        <BigNumber value={vals[nav.metric]} label={METRIC_LABEL[nav.metric]} explain={explain} bad={vals[nav.metric] < 0} />
         <Metrics vals={vals} />
         {r.leftTodayCents < 0 ? (
           <View style={{ backgroundColor: t.badSoft, borderRadius: 12, padding: 10 }}>
